@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "MrGoose.Backend": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:59668;http://localhost:59669"
+    }
+  }
+}

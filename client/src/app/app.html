@@ -1,0 +1,81 @@
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="goose" viewBox="0 0 16 13" width="30" height="24" shape-rendering="crispEdges" aria-hidden="true">
+        <g fill="var(--lime)">
+          <rect x="9" y="1" width="3" height="1"/>
+          <rect x="8" y="2" width="4" height="1"/>
+          <rect x="8" y="3" width="1" height="1"/>
+          <rect x="10" y="3" width="2" height="1"/>
+          <rect x="8" y="4" width="3" height="1"/>
+          <rect x="7" y="5" width="3" height="1"/>
+          <rect x="6" y="6" width="3" height="1"/>
+          <rect x="3" y="7" width="5" height="1"/>
+          <rect x="1" y="8" width="8" height="1"/>
+          <rect x="1" y="9" width="9" height="1"/>
+          <rect x="1" y="10" width="8" height="1"/>
+          <rect x="2" y="11" width="6" height="1"/>
+        </g>
+        <rect x="12" y="2" width="2" height="1" fill="var(--amber)"/>
+        <rect x="9" y="3" width="1" height="1" fill="var(--bg)"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">MR GOOSE</span>
+        <span class="brand-sub label-mono">arena cockpit</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      @for (item of nav; track item.path) {
+        <a class="nav-item" [routerLink]="item.path" routerLinkActive="active">
+          <span class="nav-marker"></span>{{ item.label }}
+        </a>
+      }
+    </nav>
+
+    <div class="sidebar-foot label-mono">
+      {{ backend.inElectron ? 'electron shell' : 'browser · dev' }}
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <span class="topbar-title label-mono">Indirect Prompt Injection — cockpit</span>
+      <div class="pills">
+        @if (usage()?.hasKey) {
+          <span class="pill" title="OpenRouter spend today (since 00:00 UTC)"><span class="pill-dim">today</span> {{ fmt(usage()?.spentToday) }}</span>
+          <span class="pill" title="OpenRouter credit balance"><span class="pill-dim">balance</span> {{ fmt(usage()?.balance) }}</span>
+        }
+        <span class="pill" [class.ok]="backend.health() === 'ok'" [class.down]="backend.health() === 'down'">
+          <span class="dot"></span>
+          backend {{ backend.health() }}
+          <span class="pill-dim">v{{ backend.backendVersion() }}</span>
+        </span>
+        <span class="pill" [class.ok]="backend.hub() === 'connected'" [class.down]="backend.hub() === 'disconnected'">
+          <span class="dot"></span>
+          hub {{ backend.hub() }}
+        </span>
+      </div>
+    </header>
+
+    <div class="status-strip label-mono">
+      last hub event:&nbsp;<span class="status-val">{{ backend.lastEvent() }}</span>
+    </div>
+
+    @if (backend.health() === 'down') {
+      <div class="banner" style="margin:12px 16px 0">Backend offline — start the app with <span class="mono">npm run dev</span>.</div>
+    } @else if (needsKey()) {
+      <a class="banner" routerLink="settings" style="margin:12px 16px 0;display:block">No OpenRouter key set — add it in Settings to use the crafter, judge and instructor. →</a>
+    }
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </div>
+
+  <div class="toast-wrap">
+    @for (t of toast.toasts(); track t.id) {
+      <div class="toast" [class.ok]="t.kind==='ok'" [class.err]="t.kind==='err'" [class.info]="t.kind==='info'" (click)="toast.dismiss(t.id)">{{ t.text }}</div>
+    }
+  </div>
+</div>

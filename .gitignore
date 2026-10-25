@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+client/node_modules/
+
+# builds
+client/dist/
+client/.angular/
+backend/bin/
+backend/obj/
+dist/
+out/
+
+# local data / env
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+
+# personal arena captures (account/session data, recon, submissions) — keep local, never publish
+reference/
+
+# editor / OS
+.vs/
+.idea/
+*.user
+Thumbs.db
+.DS_Store
