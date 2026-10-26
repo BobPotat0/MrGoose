@@ -1,5 +1,13 @@
 # Mr Goose
 
+## Local runtime data
+
+Electron keeps this checkout's profile, arena cookies and browser cache in `data/desktop`,
+logs in `data/logs`, and crash reports in `data/crashes`. These paths are resolved from
+this repository, regardless of the invoking directory. Existing AppData profiles are
+left intact; the checkout uses its own profile. The backend database remains next to
+the backend executable. Local `data/` and `work/` directories are ignored by Git.
+
 A Gray-Swan-arena-specific red-team cockpit. It opens the **real** arena pages in embedded tabs,
 **fills** the injection/chat surfaces with crafted payloads, reads back the real victim response —
 and leaves **every** send / launch / submit to the human.
@@ -31,7 +39,7 @@ MRGOOSE/
 ## Prerequisites
 
 - .NET SDK 10 (`dotnet --version`)
-- Node 20+ (`node -v`) and npm
+- Node ^22.22.3, ^24.15.0, or >=26.0.0 per the client lockfile (`node -v`) and npm
 - First time: `npm install` (root) and `npm --prefix client install`
 
 ## Run (dev)
@@ -65,4 +73,4 @@ Run pieces individually: `npm run build:backend`, `npm run dev:client`, `npm run
 - Page-source import currently refreshes the matrix (modelMap); full per-surface schema import is a next step.
 - Package a self-contained build (electron-builder + published backend exe).
 
-See `reference/GROUND-TRUTH.md` for selectors, the 12 scenarios, field schemas, import format and theme.
+The ignored reference/ directory is optional local material and is not included in the GitHub checkout. Use backend/Data/Seeder.cs and the scenario records for the bundled definitions.

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Mr Goose — starting up</title>
+  <link rel="stylesheet" href="startup.css">
+  <script src="startup.js" defer></script>
+</head>
+<body data-phase="starting">
+  <main class="intro" aria-labelledby="title" aria-busy="true">
+    <header class="topline">
+      <span class="wordmark"><i aria-hidden="true"></i>MR GOOSE</span>
+      <span class="edition">YOUR WORKSPACE</span>
+      <button id="close" class="close" type="button" aria-label="Close Mr Goose" title="Close Mr Goose">×</button>
+    </header>
+    <div class="scene" aria-hidden="true">
+      <!-- Render inline, as in approved preview v9; SVG image animation used a different rasterization path. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 640 340" aria-hidden="true">
+<defs>
+<g id="original-goose" shape-rendering="crispEdges"><g fill="#b6f23d"><rect x="9" y="1" width="3" height="1"/><rect x="8" y="2" width="4" height="1"/><rect x="8" y="3" width="1" height="1"/><rect x="10" y="3" width="2" height="1"/><rect x="8" y="4" width="3" height="1"/><rect x="7" y="5" width="3" height="1"/><rect x="6" y="6" width="3" height="1"/><rect x="3" y="7" width="5" height="1"/><rect x="1" y="8" width="8" height="1"/><rect x="1" y="9" width="9" height="1"/><rect x="1" y="10" width="8" height="1"/><rect x="2" y="11" width="6" height="1"/></g><rect x="12" y="2" width="2" height="1" fill="#f0b429"/><rect x="9" y="3" width="1" height="1" fill="#0a0a0b"/></g>
+<radialGradient id="water"><stop stop-color="#193635" stop-opacity=".7"/><stop offset=".65" stop-color="#122627" stop-opacity=".45"/><stop offset="1" stop-color="#0a0a0b" stop-opacity="0"/></radialGradient>
+<radialGradient id="ambience"><stop stop-color="#b6f23d" stop-opacity=".035"/><stop offset="1" stop-color="#b6f23d" stop-opacity="0"/></radialGradient>
+<linearGradient id="reflectionFade" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#fff" stop-opacity=".15"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<clipPath id="waterClip"><ellipse cx="315" cy="216" rx="140" ry="27"/></clipPath><clipPath id="aboveWater"><rect x="0" y="0" width="640" height="212"/></clipPath>
+<mask id="reflectionMask"><rect x="170" y="212" width="290" height="44" fill="url(#reflectionFade)"/></mask>
+<filter id="soft"><feGaussianBlur stdDeviation=".75"/></filter>
+</defs>
+<ellipse cx="320" cy="170" rx="200" ry="140" fill="url(#ambience)"/>
+<ellipse cx="315" cy="217" rx="167" ry="39" fill="url(#water)"/>
+<g class="ripples" fill="none" stroke="#89b8a1" stroke-width=".7">
+<ellipse class="ripple ripple-a" cx="315" cy="213" rx="88" ry="11"/>
+<ellipse class="ripple ripple-b" cx="315" cy="213" rx="88" ry="11"/>
+<ellipse class="ripple ripple-c" cx="315" cy="213" rx="88" ry="11"/>
+</g>
+<g clip-path="url(#waterClip)" mask="url(#reflectionMask)" filter="url(#soft)"><g class="reflection"><use href="#original-goose" transform="translate(246 339) scale(12 -12)"/></g></g>
+<!-- Keep the narrower bottom row submerged even at the highest float position. -->
+<g clip-path="url(#aboveWater)"><g class="float"><use href="#original-goose" transform="translate(246 85) scale(12)"/></g></g>
+<path d="M257 212H355" fill="none" stroke="#1a3732" stroke-width="2.5" opacity=".9"/>
+<g class="surface" fill="none" stroke="#759c91" stroke-width=".7" stroke-linecap="round">
+<path d="M206 217h24M365 222h20M279 237h25" opacity=".23"/>
+<path d="M234 225h17M393 212h23M323 233h18" opacity=".13"/>
+</g>
+</svg>
+    </div>
+    <section class="identity">
+      <h1 id="title">MR <span>GOOSE</span></h1>
+      <p>Your arena companion.</p>
+    </section>
+    <footer class="boot">
+      <div class="status-row">
+        <span class="status-dot" aria-hidden="true"></span>
+        <p id="status" role="status" aria-live="polite">Starting Mr Goose…</p>
+        <span id="status-tag" class="status-tag">STARTING</span>
+        <button id="retry" class="retry" type="button" hidden>Try again <span aria-hidden="true">↗</span></button>
+      </div>
+      <div id="progress" class="loading-track" role="progressbar" aria-label="Starting Mr Goose"><span></span></div>
+    </footer>
+  </main>
+</body>
+</html>

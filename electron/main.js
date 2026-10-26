@@ -1,6 +1,20 @@
 const { app, BrowserWindow, WebContentsView, ipcMain } = require('electron');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const { createStartupController } = require('./startup-controller');
+
+// Keep this checkout's profile, arena session and diagnostics together, even when launched elsewhere.
+// Electron requires these directories to exist and sessionData must be set before ready.
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const profilePath = path.join(PROJECT_ROOT, 'data', 'desktop');
+const logsPath = path.join(PROJECT_ROOT, 'data', 'logs');
+const crashPath = path.join(PROJECT_ROOT, 'data', 'crashes');
+for (const directory of [profilePath, logsPath, crashPath]) fs.mkdirSync(directory, { recursive: true });
+app.setPath('userData', profilePath);
+app.setPath('sessionData', profilePath);
+app.setPath('crashDumps', crashPath);
+app.setAppLogsPath(logsPath);
 
 // Mr Goose — Electron main process.
 // Owns the window, spawns the C# backend sidecar, and manages embedded arena tabs (WebContentsView).
@@ -14,6 +28,8 @@ const ARENA_PARTITION = 'persist:arena'; // shared cookie jar → the Gray Swan 
 
 let backend = null;
 let mainWindow = null;
+let startup = null;
+let quitting = false;
 
 /** @type {Map<string, import('electron').WebContentsView>} */
 const tabs = new Map();
@@ -27,7 +43,7 @@ function backendExePath() {
   return path.join(__dirname, '..', 'backend', 'bin', 'Debug', 'net10.0', 'MrGoose.Backend.exe');
 }
 function startBackend() {
-  backend = spawn(backendExePath(), ['--urls', BACKEND_URL], { stdio: 'inherit', windowsHide: true });
+  backend = spawn(backendExePath(), ['--urls', BACKEND_URL], { cwd: PROJECT_ROOT, stdio: 'inherit', windowsHide: true });
   backend.on('error', (err) =>
     console.error('[mrgoose] backend failed to start:', err.message,
       '\n  Build it first:  dotnet build backend/MrGoose.Backend.csproj -c Debug'));
@@ -179,25 +195,45 @@ function registerBridge() {
 
 // ───────────────────────── window ─────────────────────────
 async function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1480, height: 940, backgroundColor: '#0a0a0b', title: 'Mr Goose', autoHideMenuBar: true,
+  const window = new BrowserWindow({
+    width: 1480, height: 940, show: false,
+    backgroundColor: '#0a0a0b', title: 'Mr Goose', autoHideMenuBar: true,
     icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
-  await mainWindow.loadURL(RENDERER_URL);
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow = window;
+  window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
+  const painted = new Promise(resolve => window.once('ready-to-show', resolve));
+  try {
+    await window.loadURL(RENDERER_URL);
+    await painted;
+    return window;
+  } catch (error) {
+    if (!window.isDestroyed()) window.destroy();
+    throw error;
+  }
 }
 
 app.whenReady().then(async () => {
-  if (process.platform === 'win32') app.setAppUserModelId('com.mrgoose.cockpit');   // proper taskbar icon grouping
+  if (process.platform === 'win32') app.setAppUserModelId('com.mrgoose.cockpit');
   registerBridge();
-  startBackend();
-  const healthy = await waitForHealth();
-  if (!healthy) console.error('[mrgoose] backend /health never came up at', BACKEND_URL);
-  await createWindow();
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
-});
+  startup = createStartupController({ app, BrowserWindow, ipcMain, directory: __dirname });
+  await startup.open(async report => {
+    report('service');
+    if (!backend) startBackend();
+    const healthy = await waitForHealth();
+    if (quitting) return null;
+    if (!healthy) throw new Error('The local service did not respond. Check the backend log and retry.');
+    report('workspace');
+    return createWindow();
+  });
+  app.on('activate', () => {
+    if (!quitting && BrowserWindow.getAllWindows().length === 0) {
+      createWindow().then(window => window.show()).catch(error => console.error('[mrgoose] window failed:', error));
+    }
+  });
+}).catch(error => { console.error('[mrgoose] startup error:', error); app.quit(); });
 
 app.on('window-all-closed', () => { stopBackend(); if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', stopBackend);
+app.on('before-quit', () => { quitting = true; startup?.cancel(); stopBackend(); });
 process.on('exit', stopBackend);

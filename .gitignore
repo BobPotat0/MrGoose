@@ -26,3 +26,7 @@ reference/
 *.user
 Thumbs.db
 .DS_Store
+
+# local runtime profiles and scratch files
+/data/
+/work/
