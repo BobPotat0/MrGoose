@@ -1,9 +1,10 @@
 import { Component, inject, signal } from '@angular/core';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { BackendService } from './backend.service';
 import { ApiService } from './api.service';
 import { ToastService } from './toast.service';
 import { UsageInfo } from './models';
+import { AgentChatStore } from './agent-chat.store';
 
 @Component({
   selector: 'app-root',
@@ -15,18 +16,33 @@ export class App {
   readonly backend = inject(BackendService);
   readonly toast = inject(ToastService);
   private api = inject(ApiService);
+  readonly chat = inject(AgentChatStore);
+  readonly router = inject(Router);
 
   readonly needsKey = signal(false);
   readonly usage = signal<UsageInfo | null>(null);
 
-  readonly nav = [
+  readonly workspaceNav = [
     { path: 'assistant', label: 'Mr Goose Agent' },
+    { path: 'workbench', label: 'Break Workbench' },
+  ];
+  readonly libraryNav = [
     { path: 'prompts', label: 'Prompt Library' },
     { path: 'techniques', label: 'Technique Library' },
     { path: 'challenges', label: 'Challenge Library' },
-    { path: 'workbench', label: 'Break Workbench' },
-    { path: 'settings', label: 'Settings' },
   ];
+
+  openSession(id: string) {
+    if (this.chat.streaming() || this.chat.uploading()) return;
+    this.chat.selectChat(id);
+    void this.router.navigate(['/assistant']);
+  }
+
+  newSession() {
+    if (this.chat.streaming() || this.chat.uploading()) return;
+    this.chat.newChat();
+    void this.router.navigate(['/assistant']);
+  }
 
   constructor() {
     this.backend.init().then(() => this.refresh());
@@ -39,5 +55,6 @@ export class App {
   private async loadUsage() {
     try { const u = await this.api.usage(); this.usage.set(u); this.needsKey.set(!u.hasKey); } catch { /* backend down */ }
   }
+  sessionDate(timestamp: string) { const date = new Date(timestamp); return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
   fmt(n: number | null | undefined) { return n == null ? '—' : '$' + n.toFixed(n < 1 ? 4 : 2); }
 }

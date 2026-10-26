@@ -23,7 +23,7 @@ public sealed class AgentHub(MrGooseDb db, OpenRouterClient openRouter, CraftSer
 
     /// <summary>The Mr Goose Agent: a tool-using loop over the whole app. DATA tools run server-side;
     /// PAGE tools (arena_*) are executed by the client via the Electron bridge and returned here.</summary>
-    public async Task AgentChat(List<ChatMsgDto> messages)
+    public async Task AgentChat(List<ChatMsgDto> messages, string? sessionId = null)
     {
         var key = await KeyStore.GetActiveKeyAsync(db);
         var model = (await db.Settings.FindAsync("openrouter.model"))?.Value ?? "";
@@ -58,7 +58,15 @@ public sealed class AgentHub(MrGooseDb db, OpenRouterClient openRouter, CraftSer
                     await Clients.Caller.SendAsync("agentTool", new { name, args });
                     var result = AgentService.IsPageTool(name)
                         ? await MediatePageToolAsync(name, args)
-                        : await agent.ExecuteDataToolAsync(name, args);
+                        : await agent.ExecuteDataToolAsync(name, args, sessionId);
+                    if (name == "create_file" && JsonNode.Parse(result)?["file"] is JsonNode savedFile)
+                        await Clients.Caller.SendAsync("agentFile", savedFile);
+                    if (name == "show_techniques")
+                    {
+                        var rows = JsonNode.Parse(result) as JsonArray ?? new JsonArray();
+                        await Clients.Caller.SendAsync("agentTechniques", rows);
+                        result = $"Displayed a snapshot of all {rows.Count} current techniques in the operator's chat. No techniques were changed.";
+                    }
                     msgs.Add(ToolMsg(id, name, result));
                 }
             }

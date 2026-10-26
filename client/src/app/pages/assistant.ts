@@ -1,23 +1,40 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, ElementRef, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BackendService } from '../backend.service';
 import { ArenaService } from '../arena.service';
 import { ApiService } from '../api.service';
 import { ToastService } from '../toast.service';
 import { AgentChatStore } from '../agent-chat.store';
-import { KnowledgeNote, AgentDoc } from '../models';
+import { AgentFilesComponent } from '../agent-files.component';
+import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
 
 @Component({
   selector: 'mg-assistant',
-  imports: [FormsModule],
+  imports: [FormsModule, AgentFilesComponent],
   template: `
-    <section class="page" style="max-width:920px">
-      <header class="page-head">
-        <span class="label-mono">Mr Goose Agent</span>
-        <h1>Mr Goose Agent</h1>
-        <p class="sub">Your assistant for the whole tool. It can manage the prompt library + folders, techniques, challenges &amp; objectives, recon/verdicts, its own knowledge base, encode payloads, and (in the embedded arena) open tabs + fill fields — never send. Just ask.</p>
+    <section class="page agent-page">
+      <header class="page-head agent-head">
+        <div class="agent-heading">
+          <span class="label-mono">Mr Goose Agent</span>
+          @if (renaming()) {
+            <form class="row title-form" (submit)="saveTitle($event)">
+              <input class="input" name="sessionTitle" [(ngModel)]="titleDraft" aria-label="Session title" maxlength="80" />
+              <button class="btn" type="submit">Save</button><button class="btn ghost" type="button" (click)="renaming.set(false)">Cancel</button>
+            </form>
+          } @else {
+            <div class="row title-row"><h1>{{ chat.currentTitle() }}</h1><button class="btn ghost title-rename" type="button" (click)="beginRename()" [disabled]="chat.streaming()">Rename</button></div>
+          }
+        </div>
+        <div class="row agent-actions">
+          <button class="btn" type="button" (click)="showInstructions.set(!showInstructions())" [attr.aria-expanded]="showInstructions()" aria-controls="agent-instructions">Instructions</button>
+          <button class="btn" type="button" (click)="showFiles.set(!showFiles())" [attr.aria-expanded]="showFiles()" aria-controls="agent-session-files" [disabled]="chat.uploading()">Files</button>
+          <button class="btn ghost" type="button" (click)="deleteChat()" [disabled]="chat.streaming() || chat.uploading() || !chat.sessions().length">Delete chat</button>
+        </div>
       </header>
 
+      @if (showInstructions()) {
+      <section id="agent-instructions" class="instructions-panel" aria-label="Agent instructions">
+        <div class="row spread instructions-head"><span class="label-mono">Instructions</span><button class="btn ghost" type="button" (click)="showInstructions.set(false)">Close</button></div>
       <!-- system prompt (view + edit) -->
       <div class="card alt">
         <div class="row spread" style="cursor:pointer" (click)="showSys.set(!showSys())">
@@ -61,9 +78,40 @@ import { KnowledgeNote, AgentDoc } from '../models';
         }
       </div>
 
-      <div class="card" style="min-height:320px">
+      </section>
+      }
+      @if (chat.historyError()) { <p class="history-error" role="status">{{ chat.historyError() }}</p> }
+
+      <div class="agent-layout" [class.with-files]="showFiles()">
+      <div class="agent-chat-column">
+      <div class="card agent-thread" style="min-height:320px">
         @for (v of chat.view(); track $index) {
-          @if (v.type==='tool') { <div class="mono" style="font-size:11px;color:var(--amber);margin:4px 0">⚙ {{ v.text }}</div> }
+          @if (v.type==='file' && v.file) {
+            <button class="file-card" type="button" (click)="openFile(v.file)"><span class="mono file-card-icon">▤</span><span><strong>{{ v.file.name }}</strong><small>{{ v.file.source === 'upload' ? 'Uploaded by you' : 'Created by Mr Goose' }} · Open preview →</small></span></button>
+          }
+          @else if (v.type==='techniques') {
+            <section class="technique-snapshot" aria-label="Technique library snapshot">
+              <div class="row spread"><strong>Technique library</strong><span class="chip">{{ v.techniques?.length || 0 }} techniques</span></div>
+              <p class="muted" style="font-size:11px;margin:6px 0 12px">Snapshot from when the agent called show_techniques.</p>
+              @if (v.techniques?.length) {
+                <div style="overflow-x:auto">
+                  <table class="technique-table">
+                    <thead><tr><th scope="col">Technique</th><th scope="col">Description</th><th scope="col">When it works / example</th></tr></thead>
+                    <tbody>
+                      @for (t of v.techniques; track t.id) {
+                        <tr><td><strong>{{ t.title }}</strong><div class="muted" style="margin-top:6px">{{ t.tags }} · {{ t.builtin ? 'built-in' : 'custom' }}</div></td>
+                          <td>{{ t.summary || '—' }}</td>
+                          <td><p>{{ t.whenItWorks || 'No applicability notes.' }}</p>
+                            @if (t.example) { <details style="margin-top:8px"><summary>Example</summary><pre class="mono">{{ t.example }}</pre></details> }
+                          </td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              } @else { <p class="dim">No techniques in the library yet.</p> }
+            </section>
+          }
+          @else if (v.type==='tool') { <div class="mono" style="font-size:11px;color:var(--amber);margin:4px 0">⚙ {{ v.text }}</div> }
           @else if (v.type==='user') { <div style="margin-bottom:12px"><span class="label-mono" style="color:var(--lime)">you</span><pre class="mono" style="white-space:pre-wrap;font-size:13px;line-height:1.5;margin-top:4px;color:var(--text)">{{ v.text }}</pre></div> }
           @else {
             <div style="margin-bottom:12px">
@@ -79,18 +127,71 @@ import { KnowledgeNote, AgentDoc } from '../models';
         @if (!chat.view().length) { <p class="dim">e.g. “make a folder ‘WB2 wins’ and move my break prompts into it”, “add a technique for the sandbox reframe”, “set a model × scenario verdict to break”, or “open the arena and fill the chat box with …”.</p> }
       </div>
 
-      <div class="card">
-        <textarea class="textarea" [(ngModel)]="input" (keydown.control.enter)="send()" placeholder="ask Mr Goose to do something… (Ctrl+Enter)"></textarea>
-        <div class="row" style="margin-top:8px">
-          <button class="btn primary" (click)="send()" [disabled]="chat.streaming() || !input.trim()">{{ chat.streaming() ? 'working…' : 'send (Ctrl+Enter)' }}</button>
-          @if (chat.view().length) { <button class="btn" (click)="chat.clear()">clear</button> }
-          <span class="grow"></span>
-          <span class="chip" [class.amber]="backend.hub()!=='connected'">hub {{ backend.hub() }}</span>
-          <span class="chip" [class.lime]="arena.available">{{ arena.available ? 'arena ready' : 'arena: electron only' }}</span>
+      <div class="composer-dock">
+        <div class="agent-composer">
+          <textarea #composer [(ngModel)]="input" (input)="resizeComposer($event)" (keydown)="composerKeydown($event)" rows="2" aria-label="Message Mr Goose" placeholder="Ask Mr Goose…"></textarea>
+          <div class="composer-footer">
+            <div class="composer-context"><span class="composer-mode">Agent</span><span class="composer-model" [title]="modelLabel()">{{ modelLabel() }}</span></div>
+            <button class="composer-send" type="button" (click)="send()" [disabled]="chat.streaming() || chat.uploading() || !input.trim()" aria-label="Send message"><span aria-hidden="true">↑</span></button>
+          </div>
         </div>
+        <div class="composer-hints"><span>Enter send · Shift+Enter newline</span><span role="status">{{ chat.streaming() ? 'Working…' : 'Fill only · you submit' }}</span></div>
+      </div>
+      </div>
+      @defer (when showFiles()) {
+        @if (showFiles()) { <mg-agent-files id="agent-session-files" [sessionId]="chat.activeId()" [revision]="chat.filesRevision()" [openFileId]="fileFocus()?.sessionId === chat.activeId() ? fileFocus()?.id || '' : ''" (fileUploaded)="chat.recordFile($event)" (uploadingChange)="uploadState($event)" (fileSelected)="focusFile($event)" /> }
+      }
       </div>
     </section>
   `,
+  styles: [`
+    .technique-snapshot { margin: 12px 0 18px; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 12px; }
+    .technique-table { width: 100%; border-collapse: collapse; min-width: 600px; font-size: 12px; line-height: 1.5; }
+    .technique-table th, .technique-table td { padding: 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .technique-table th { color: var(--text-dim); font-size: 11px; }
+    .technique-table td:first-child { width: 24%; }
+    .technique-table td:nth-child(2) { width: 34%; }
+    .technique-table pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; margin: 8px 0 0; }
+    .technique-table summary { cursor: pointer; color: var(--lime); }
+    :host { display: block; height: 100%; }
+    .agent-page { width: 100%; max-width: none; min-width: 0; min-height: 100%; display: flex; flex-direction: column; }
+    .agent-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+    .agent-heading { min-width: 0; flex: 1; }
+    .title-row { gap: 10px; margin-top: 6px; }
+    .title-row h1 { overflow-wrap: anywhere; }
+    .title-rename { color: var(--text-dim); font-size: 11px; padding: 4px 7px; }
+    .title-form { margin-top: 9px; }
+    .title-form .input { flex: 1 1 180px; }
+    .agent-actions { padding-top: 3px; }
+    .instructions-panel { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); margin-bottom: 18px; }
+    .instructions-head { margin: 0 2px 10px; }
+    .instructions-panel > .card:last-child { margin-bottom: 0; }
+    .history-error { color: var(--amber); font-size: 12px; margin-bottom: 12px; }
+    .agent-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; flex: 1; min-height: 0; }
+    .agent-layout.with-files { grid-template-columns: minmax(0, 1fr) minmax(300px, 34%); }
+    .agent-chat-column { min-width: 0; display: flex; flex-direction: column; }
+    .agent-thread { flex: 1; }
+    .file-card { display: flex; align-items: center; gap: 12px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 12px 14px; margin: 10px 0 16px; text-align: left; cursor: pointer; max-width: 100%; }
+    .file-card:hover { border-color: var(--lime); }
+    .file-card strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+    .file-card small { display: block; color: var(--text-dim); font-size: 11px; margin-top: 5px; }
+    .file-card-icon { color: var(--lime); font-size: 22px; }
+    @media (max-width: 1100px) { .agent-layout.with-files { grid-template-columns: minmax(0, 1fr); } .agent-chat-column { min-height: 460px; } }
+    .composer-dock { position: sticky; bottom: 0; padding-top: 9px; padding-bottom: 3px; }
+    .agent-composer { border: 1px solid var(--border-strong); border-left: 3px solid var(--lime); border-radius: 8px; background: var(--surface-2); padding: 14px 15px 10px; }
+    .agent-composer:focus-within { border-color: var(--lime); }
+    .agent-composer textarea { display: block; width: 100%; min-height: 56px; max-height: 220px; resize: none; overflow-y: auto; border: 0; outline: none; padding: 0; background: transparent; color: var(--text); font: 13px/1.6 var(--mono); }
+    .agent-composer textarea::placeholder { color: var(--text-mute); }
+    .composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+    .composer-context { min-width: 0; display: flex; align-items: center; gap: 12px; font: 11px var(--mono); }
+    .composer-mode { color: var(--lime); }
+    .composer-model { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .composer-send { border: 1px solid var(--lime); border-radius: 5px; background: var(--lime); color: var(--bg); width: 32px; height: 30px; font: 21px var(--mono); cursor: pointer; flex-shrink: 0; }
+    .composer-send:hover { background: var(--lime-soft); }
+    .composer-send:disabled { opacity: .4; cursor: not-allowed; }
+    .composer-hints { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; color: var(--text-mute); font: 11px/1.5 var(--mono); }
+    @media (max-width: 760px) { .agent-page { padding: 20px 16px; } .agent-heading { flex-basis: 100%; } .agent-actions { padding-top: 0; } }
+  `],
 })
 export class AssistantPage {
   backend = inject(BackendService);
@@ -100,6 +201,13 @@ export class AssistantPage {
   private toast = inject(ToastService);
 
   input = '';
+  readonly showInstructions = signal(false);
+  readonly showFiles = signal(true);
+  readonly fileFocus = signal<{ sessionId: string; id: string } | null>(null);
+  readonly renaming = signal(false);
+  readonly modelLabel = signal('Configured model');
+  titleDraft = '';
+  @ViewChild('composer') composer?: ElementRef<HTMLTextAreaElement>;
 
   // system prompt + knowledge base
   readonly showSys = signal(false);
@@ -112,10 +220,34 @@ export class AssistantPage {
 
   constructor() { this.loadAgentConfig(); }
 
-  send() { const t = this.input; this.input = ''; this.chat.send(t); }
+  send() {
+    if (this.chat.streaming() || this.chat.uploading() || !this.input.trim()) return;
+    const text = this.input; this.input = '';
+    if (this.composer) this.composer.nativeElement.style.height = '';
+    void this.chat.send(text);
+  }
+  composerKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.isComposing) {
+      event.preventDefault(); this.send();
+    }
+  }
+  resizeComposer(event: Event) {
+    const area = event.target as HTMLTextAreaElement;
+    area.style.height = 'auto'; area.style.height = Math.min(area.scrollHeight, 220) + 'px';
+  }
+  beginRename() { this.titleDraft = this.chat.currentTitle(); this.renaming.set(true); }
+  saveTitle(event: Event) { event.preventDefault(); this.chat.renameChat(this.titleDraft); this.renaming.set(false); }
+  focusFile(file: AgentFileInfo) { this.fileFocus.set({ sessionId: this.chat.activeId(), id: file.id }); }
+  openFile(file: AgentFileInfo) { this.focusFile(file); this.showFiles.set(true); }
+  uploadState(uploading: boolean) { if (uploading) this.chat.beginUpload(); else this.chat.uploading.set(false); }
+  async deleteChat() {
+    if (this.chat.streaming() || this.chat.uploading() || !confirm('Delete this saved conversation and its files?')) return;
+    try { await this.api.deleteAgentFiles(this.chat.activeId()); this.chat.deleteChat(); }
+    catch { this.toast.err('Could not delete session files. The conversation has been kept.'); }
+  }
 
   private async loadAgentConfig() {
-    try { const s = await this.api.agentSystem(); this.sysPrompt = s.prompt; this.sysCustom.set(s.isCustom); this.docs.set(await this.api.agentDocs()); this.knowledge.set(await this.api.knowledge()); } catch { /* backend down */ }
+    try { const s = await this.api.agentSystem(); this.sysPrompt = s.prompt; this.sysCustom.set(s.isCustom); this.docs.set(await this.api.agentDocs()); this.knowledge.set(await this.api.knowledge()); const settings = await this.api.settings(); this.modelLabel.set(settings.model || 'Choose a model in Settings'); } catch { /* backend down */ }
   }
   async saveSys() { await this.api.setAgentSystem(this.sysPrompt); this.sysCustom.set(true); this.toast.ok('system prompt saved'); }
   async resetSys() { const r = await this.api.resetAgentSystem(); this.sysPrompt = r.prompt; this.sysCustom.set(false); this.toast.ok('reset to default'); }

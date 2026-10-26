@@ -1,0 +1,21 @@
+.mg-file-markdown { max-height: 520px; overflow: auto; padding: 16px; border-top: 1px solid var(--border); color: var(--text); font: 13px/1.7 var(--sans); overflow-wrap: anywhere; }
+.mg-file-markdown > :first-child { margin-top: 0; }
+.mg-file-markdown > :last-child { margin-bottom: 0; }
+.mg-file-markdown h1, .mg-file-markdown h2, .mg-file-markdown h3, .mg-file-markdown h4, .mg-file-markdown h5, .mg-file-markdown h6 { line-height: 1.35; font-weight: 600; margin: 22px 0 10px; }
+.mg-file-markdown h1 { font-size: 21px; }
+.mg-file-markdown h2 { font-size: 17px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
+.mg-file-markdown h3 { font-size: 15px; }
+.mg-file-markdown h4, .mg-file-markdown h5, .mg-file-markdown h6 { font-size: 13px; }
+.mg-file-markdown p { margin: 10px 0; }
+.mg-file-markdown ul, .mg-file-markdown ol { padding-left: 23px; margin: 10px 0; }
+.mg-file-markdown li { margin: 4px 0; }
+.mg-file-markdown li > p { margin: 4px 0; }
+.mg-file-markdown a { color: var(--lime); text-decoration: underline; text-underline-offset: 3px; }
+.mg-file-markdown blockquote { margin: 14px 0; padding: 2px 12px; border-left: 2px solid var(--border-strong); color: var(--text-dim); }
+.mg-file-markdown code { font: 12px/1.6 var(--mono); background: var(--surface-3); border-radius: 3px; padding: 2px 4px; }
+.mg-file-markdown pre { margin: 14px 0; padding: 12px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; }
+.mg-file-markdown pre code { white-space: pre; background: transparent; padding: 0; }
+.mg-file-markdown table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 14px 0; }
+.mg-file-markdown th, .mg-file-markdown td { padding: 9px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+.mg-file-markdown th { background: var(--surface-2); color: var(--text-dim); font-weight: 500; }
+.mg-file-markdown hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }

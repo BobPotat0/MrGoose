@@ -29,8 +29,11 @@ public class MrGooseDb(DbContextOptions<MrGooseDb> options) : DbContext(options)
     public DbSet<KnowledgeNote> KnowledgeNotes => Set<KnowledgeNote>();
     public DbSet<OpenRouterKey> OpenRouterKeys => Set<OpenRouterKey>();
 
+    public DbSet<AgentFile> AgentFiles => Set<AgentFile>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<AgentFile>().HasIndex(f => f.SessionId);
         b.Entity<AppSetting>().HasKey(x => x.Key);
         b.Entity<Challenge>().HasIndex(c => c.Slug).IsUnique();
         b.Entity<Scenario>().HasIndex(s => new { s.ChallengeId, s.Code });

@@ -15,5 +15,5 @@ The Gray-Swan jailbreak / IPI technique catalog. Color-coded by tactic with exac
 The operator can add their own techniques, tag them, edit the tag registry (colors), filter + search,
 import/export JSON, and reset built-ins. Each technique shows in 3 columns: name+tags · description · example.
 
-**Your tools (agent):** list_techniques, create_technique, update_technique, delete_technique
+**Your tools (agent):** show_techniques (opens a read-only snapshot table in chat), list_techniques, create_technique, update_technique, delete_technique
 (built-ins are read-only and cannot be deleted).
