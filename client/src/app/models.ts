@@ -81,3 +81,6 @@ export interface MrGooseApi {
 declare global {
   interface Window { mrgoose?: MrGooseApi; }
 }
+
+export interface AgentFileInfo { id: string; name: string; size: number; createdAt: string; source?: 'agent' | 'upload'; }
+export interface AgentFileContent { file: AgentFileInfo; content: string; }

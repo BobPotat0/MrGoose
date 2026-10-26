@@ -14,6 +14,8 @@
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   border-right: 1px solid var(--border);
   padding: 16px 12px;
+  min-height: 0;
+  overflow-y: auto;
   backdrop-filter: blur(2px);
 }
 
@@ -46,7 +48,22 @@
   box-shadow: 0 0 8px color-mix(in srgb, var(--lime) 60%, transparent);
 }
 
-.sidebar-foot { margin-top: auto; padding: 10px 10px 2px; }
+.nav-heading { padding: 17px 10px 7px; font-size: 11px; }
+.nav-heading:first-child { padding-top: 3px; }
+.agent-sessions { margin-top: 19px; min-height: 70px; display: flex; flex-direction: column; flex: 1; }
+.session-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px 7px 10px; }
+.session-new { border: 0; background: transparent; color: var(--text-dim); font: 19px var(--mono); width: 28px; height: 28px; border-radius: var(--radius); cursor: pointer; }
+.session-new:hover { background: var(--surface-3); }
+.session-list { overflow-y: auto; min-height: 0; }
+.session-item { display: block; width: 100%; padding: 9px 10px; border: 1px solid transparent; border-left: 2px solid transparent; border-radius: var(--radius); background: transparent; color: var(--text-dim); text-align: left; cursor: pointer; }
+.session-item:hover { background: var(--surface-2); color: var(--text); }
+.session-item.active { background: var(--surface-3); border-left-color: var(--lime); color: var(--text); }
+.session-title { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-date { display: block; font: 11px var(--mono); color: var(--text-mute); margin-top: 5px; }
+.session-empty { color: var(--text-mute); font-size: 12px; padding: 8px 10px; }
+.session-item:disabled, .session-new:disabled { opacity: .45; cursor: not-allowed; }
+.sidebar-foot { margin-top: auto; }
+.shell-status { display: block; padding: 12px 10px 2px; }
 
 /* ───────── main ───────── */
 .main { display: flex; flex-direction: column; min-width: 0; height: 100dvh; }

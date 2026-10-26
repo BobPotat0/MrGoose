@@ -8,6 +8,8 @@ public static class ApiEndpoints
 {
     public static void MapApi(this WebApplication app)
     {
+        app.MapAgentFiles();
+
         // ---- Challenges + matrix ----
         app.MapGet("/api/challenges", async (MrGooseDb db) =>
             await db.Challenges.Select(c => new

@@ -5,7 +5,7 @@ import {
   ChallengeSummary, ChallengeDetail, PromptDto, TechniqueDto, TechniqueTagDto, EncodingTransform,
   SubmissionDto, SettingsDto, DossierState, BuildingBlockDto, BreakItem, PromptSelection,
   ScenarioDto, FinderSummary, ChatSessionDto, ChatTurnDto, JudgeResult, FolderDto,
-  KnowledgeNote, AgentDoc, AgentSystem, KeyInfo, ModelInfo, UsageInfo,
+  KnowledgeNote, AgentDoc, AgentSystem, KeyInfo, ModelInfo, UsageInfo, AgentFileInfo, AgentFileContent,
 } from './models';
 
 /** Typed REST wrapper over the C# backend. Methods return Promises for easy async/await in pages. */
@@ -14,6 +14,12 @@ export class ApiService {
   private http = inject(HttpClient);
   private base = window.mrgoose?.backendUrl ?? 'http://127.0.0.1:5174';
   private url(p: string) { return `${this.base}${p}`; }
+
+  agentFiles(sessionId: string) { return firstValueFrom(this.http.get<AgentFileInfo[]>(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files`))); }
+  uploadAgentFile(sessionId: string, file: File) { const form = new FormData(); form.append('file', file); return firstValueFrom(this.http.post<AgentFileInfo>(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files`), form)); }
+  agentFile(sessionId: string, id: string) { return firstValueFrom(this.http.get<AgentFileContent>(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(id)}`))); }
+  agentFileDownload(sessionId: string, id: string) { return firstValueFrom(this.http.get(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(id)}/download`), { responseType: 'blob' })); }
+  deleteAgentFiles(sessionId: string) { return firstValueFrom(this.http.delete(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files`))); }
 
   challenges() { return firstValueFrom(this.http.get<ChallengeSummary[]>(this.url('/api/challenges'))); }
   challenge(slug: string) { return firstValueFrom(this.http.get<ChallengeDetail>(this.url(`/api/challenges/${slug}`))); }

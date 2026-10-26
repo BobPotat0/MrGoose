@@ -26,6 +26,7 @@ builder.Services.AddScoped<ImportService>();
 builder.Services.AddScoped<CraftService>();
 builder.Services.AddScoped<FinderService>();
 builder.Services.AddScoped<AgentService>();
+builder.Services.AddScoped<AgentFileService>();
 builder.Services.AddSignalR();
 
 builder.Services.ConfigureHttpJsonOptions(o =>
@@ -44,6 +45,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<MrGooseDb>();
     db.Database.EnsureCreated();
+    db.Database.ExecuteSqlRaw(AgentFileService.SchemaSql);
     // lightweight column add for existing DBs (EnsureCreated won't migrate) — keeps the operator's data
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN WaveBreaksJson TEXT NOT NULL DEFAULT '{}'"); } catch { /* column already exists */ }
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN Wave TEXT NOT NULL DEFAULT ''"); } catch { /* column already exists */ }

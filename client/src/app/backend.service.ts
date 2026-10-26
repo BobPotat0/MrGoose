@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
+import type { TechniqueDto, AgentFileInfo } from './models';
 import './models'; // pulls in the global window.mrgoose declaration
 
 type Health = 'checking' | 'ok' | 'down';
@@ -20,6 +21,7 @@ export class BackendService {
 
   private connection?: signalR.HubConnection;
   private started = false;
+  private pageActionHandler?: (a: { id: string; name: string; args: string }) => void;
 
   async init(): Promise<void> {
     if (this.started) return;
@@ -48,6 +50,7 @@ export class BackendService {
       .withAutomaticReconnect()
       .build();
 
+    this.connection.on('agentPageAction', (a: { id: string; name: string; args: string }) => this.pageActionHandler?.(a));
     this.connection.on('welcome', (p: { utc: string }) => this.lastEvent.set(`welcome · ${this.time(p.utc)}`));
     this.connection.on('pong', (p: { echo: string; utc: string }) => this.lastEvent.set(`pong "${p.echo}" · ${this.time(p.utc)}`));
     this.connection.onreconnecting(() => this.hub.set('connecting'));
@@ -94,28 +97,37 @@ export class BackendService {
   }
 
   /** Mr Goose Agent: tool-using loop over the whole app. Tokens → onToken, reasoning → onReasoning, tools → onTool. */
-  async agentChat(messages: ChatMsg[], onToken: (t: string) => void, onTool: (name: string, args: string) => void, onDone: (ok: boolean) => void, onReasoning?: (t: string) => void): Promise<void> {
+  async agentChat(messages: ChatMsg[], onToken: (t: string) => void, onTool: (name: string, args: string) => void, onDone: (ok: boolean) => void, onReasoning?: (t: string) => void, onTechniques?: (rows: TechniqueDto[]) => void, onFile?: (file: AgentFileInfo) => void, sessionId?: string): Promise<void> {
     if (!this.connection || this.hub() !== 'connected') { onDone(false); return; }
     const onTok = (t: string) => onToken(t);
     const onReas = (t: string) => onReasoning?.(t);
     const onToolEv = (p: { name: string; args: string }) => onTool(p.name, p.args);
+    const onTable = (rows: TechniqueDto[]) => onTechniques?.(rows);
+    const onFileEvent = (file: AgentFileInfo) => onFile?.(file);
+    let finished = false;
     const onFin = (r: { ok: boolean }) => {
+      if (finished) return;
+      finished = true;
+      this.connection!.off('agentFile', onFileEvent);
+      this.connection!.off('agentTechniques', onTable);
       this.connection!.off('agentToken', onTok);
       this.connection!.off('agentReasoning', onReas);
       this.connection!.off('agentTool', onToolEv);
       this.connection!.off('agentDone', onFin);
       onDone(!!r?.ok);
     };
+    this.connection.on('agentFile', onFileEvent);
+    this.connection.on('agentTechniques', onTable);
     this.connection.on('agentToken', onTok);
     this.connection.on('agentReasoning', onReas);
     this.connection.on('agentTool', onToolEv);
     this.connection.on('agentDone', onFin);
-    try { await this.connection.invoke('AgentChat', messages); } catch { onFin({ ok: false }); }
+    try { await this.connection.invoke('AgentChat', messages, sessionId ?? null); } catch { onFin({ ok: false }); }
   }
 
   /** Register a handler for agent page actions (the agent asks the client to fill/read the arena). */
   onAgentPageAction(handler: (a: { id: string; name: string; args: string }) => void): void {
-    this.connection?.on('agentPageAction', handler);
+    this.pageActionHandler = handler;
   }
   agentPageResult(id: string, result: string): void {
     this.connection?.invoke('AgentPageResult', id, result).catch(() => {});

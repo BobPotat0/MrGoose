@@ -25,16 +25,42 @@
       </div>
     </div>
 
-    <nav class="nav">
-      @for (item of nav; track item.path) {
-        <a class="nav-item" [routerLink]="item.path" routerLinkActive="active">
-          <span class="nav-marker"></span>{{ item.label }}
+    <nav class="nav" aria-label="Main navigation">
+      <span class="nav-heading label-mono">Workspace</span>
+      @for (item of workspaceNav; track item.path) {
+        <a class="nav-item" [routerLink]="item.path" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-marker" aria-hidden="true"></span>{{ item.label }}
+        </a>
+      }
+      <span class="nav-heading label-mono">Libraries</span>
+      @for (item of libraryNav; track item.path) {
+        <a class="nav-item" [routerLink]="item.path" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-marker" aria-hidden="true"></span>{{ item.label }}
         </a>
       }
     </nav>
 
-    <div class="sidebar-foot label-mono">
-      {{ backend.inElectron ? 'electron shell' : 'browser · dev' }}
+    <section class="agent-sessions" aria-label="Agent sessions">
+      <div class="session-heading">
+        <span class="label-mono">Agent sessions</span>
+        <button class="session-new" type="button" (click)="newSession()" [disabled]="chat.streaming() || chat.uploading()" aria-label="New agent session" title="New agent session">+</button>
+      </div>
+      <div class="session-list">
+        @for (session of chat.sessions(); track session.id) {
+          <button class="session-item" type="button" (click)="openSession(session.id)" [disabled]="chat.streaming() || chat.uploading()"
+            [class.active]="router.url.startsWith('/assistant') && chat.activeId() === session.id"
+            [attr.aria-current]="router.url.startsWith('/assistant') && chat.activeId() === session.id ? 'page' : null" [title]="session.title">
+            <span class="session-title">{{ session.title }}</span>
+            <time class="session-date" [attr.datetime]="session.updatedAt">{{ sessionDate(session.updatedAt) }}</time>
+          </button>
+        }
+        @if (!chat.sessions().length) { <p class="session-empty">Your conversations appear here.</p> }
+      </div>
+    </section>
+
+    <div class="sidebar-foot">
+      <a class="nav-item" routerLink="settings" routerLinkActive="active" ariaCurrentWhenActive="page"><span class="nav-marker" aria-hidden="true"></span>Settings</a>
+      <span class="label-mono shell-status">{{ backend.inElectron ? 'electron shell' : 'browser · dev' }}</span>
     </div>
   </aside>
 
