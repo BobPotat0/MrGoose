@@ -23,27 +23,30 @@ app.setAppLogsPath(logsPath);
 // an arena page — the human clicks every send/launch/submit. (Gray Swan RoE + user decision.)
 
 const BACKEND_URL = process.env.MRGOOSE_BACKEND_URL || 'http://127.0.0.1:5174';
-const RENDERER_URL = process.env.MRGOOSE_RENDERER_URL || 'http://localhost:4200';
-const ARENA_PARTITION = 'persist:arena'; // shared cookie jar → the Gray Swan login persists
+let RENDERER_URL = process.env.MRGOOSE_RENDERER_URL || 'http://localhost:4200';
+if (new URL(BACKEND_URL).hostname !== '127.0.0.1' || new URL(RENDERER_URL).hostname !== 'localhost' && new URL(RENDERER_URL).hostname !== '127.0.0.1') throw new Error('MrGoose services must use local addresses');
+const { randomBytes, randomUUID } = require('node:crypto');
+const backendToken = randomBytes(32).toString('hex');
+const instanceId = randomUUID();
 
 let backend = null;
 let mainWindow = null;
 let startup = null;
 let quitting = false;
 
-/** @type {Map<string, import('electron').WebContentsView>} */
-const tabs = new Map();
-let activeTabId = null;
-let tabSeq = 0;
-let arenaVisible = false;
-let lastBounds = { x: 0, y: 0, width: 0, height: 0 };
+let arena = null;
+let control = null;
+let tray = null;
+let arenaWindow = null;
+let cockpitServer = null;
+let cockpitOpening = null;
 
 // ───────────────────────── backend sidecar ─────────────────────────
 function backendExePath() {
   return path.join(__dirname, '..', 'backend', 'bin', 'Debug', 'net10.0', 'MrGoose.Backend.exe');
 }
 function startBackend() {
-  backend = spawn(backendExePath(), ['--urls', BACKEND_URL], { cwd: PROJECT_ROOT, stdio: 'inherit', windowsHide: true });
+  backend = spawn(backendExePath(), ['--urls', BACKEND_URL], { cwd: PROJECT_ROOT, stdio: 'inherit', windowsHide: true, env: { ...process.env, MRGOOSE_CONTROL_TOKEN: backendToken, MRGOOSE_INSTANCE_ID: instanceId, MRGOOSE_RENDERER_ORIGIN: new URL(RENDERER_URL).origin } });
   backend.on('error', (err) =>
     console.error('[mrgoose] backend failed to start:', err.message,
       '\n  Build it first:  dotnet build backend/MrGoose.Backend.csproj -c Debug'));
@@ -55,142 +58,66 @@ function stopBackend() {
 async function waitForHealth(timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    try { const r = await fetch(`${BACKEND_URL}/health`); if (r.ok) return true; } catch { /* not up */ }
+    try { const r = await fetch(`${BACKEND_URL}/health`, { headers: { Authorization: 'Bearer ' + backendToken } }); if (r.ok && (await r.json()).instanceId === instanceId) return true; } catch { /* not up */ }
     await new Promise((res) => setTimeout(res, 400));
   }
   return false;
 }
 
-// ───────────────────────── arena tab manager ─────────────────────────
-function activeView() { return activeTabId ? tabs.get(activeTabId) : null; }
-
-function applyVisibility() {
-  for (const [id, view] of tabs) {
-    const show = arenaVisible && id === activeTabId;
-    try { view.setVisible(show); } catch { /* older electron */ }
-    if (show) view.setBounds(lastBounds);
-  }
-}
-
-function createTab(url) {
-  const id = `arena-${++tabSeq}`;
-  const view = new WebContentsView({
-    webPreferences: { partition: ARENA_PARTITION, contextIsolation: true, nodeIntegration: false },
-  });
-  mainWindow.contentView.addChildView(view);
-  view.setBounds(lastBounds);
-  view.webContents.loadURL(url || 'https://app.grayswan.ai/');
-  tabs.set(id, view);
-  activeTabId = id;
-  applyVisibility();
-  return id;
-}
-
-function closeTab(id) {
-  const view = tabs.get(id);
-  if (!view) return;
-  try { mainWindow.contentView.removeChildView(view); view.webContents.close?.(); } catch { /* ignore */ }
-  tabs.delete(id);
-  if (activeTabId === id) activeTabId = tabs.keys().next().value ?? null;
-  applyVisibility();
-}
-
-function listTabs() {
-  return [...tabs.entries()].map(([id, v]) => ({
-    id, url: v.webContents.getURL(), title: v.webContents.getTitle(), active: id === activeTabId,
-  }));
-}
-
-// run JS in the active arena view; selector/value are JSON-embedded so there is nothing to escape
-async function runInActive(buildScript) {
-  const view = activeView();
-  if (!view) return { ok: false, note: 'no active arena tab' };
-  try { return await view.webContents.executeJavaScript(buildScript(), true); }
-  catch (e) { return { ok: false, note: String(e?.message || e) }; }
-}
-
+// All page callers share the same explicit-tab service. Only the cockpit may invoke IPC.
 function registerBridge() {
-  // tab management
-  ipcMain.handle('mrgoose:tabs:create', (_e, { url }) => createTab(url));
-  ipcMain.handle('mrgoose:tabs:select', (_e, { tabId }) => { if (tabs.has(tabId)) { activeTabId = tabId; applyVisibility(); } return listTabs(); });
-  ipcMain.handle('mrgoose:tabs:close', (_e, { tabId }) => { closeTab(tabId); return listTabs(); });
-  ipcMain.handle('mrgoose:tabs:list', () => listTabs());
-  ipcMain.handle('mrgoose:tabs:loadUrl', (_e, { tabId, url }) => { tabs.get(tabId)?.webContents.loadURL(url); return true; });
-  ipcMain.handle('mrgoose:tabs:setBounds', (_e, b) => {
-    lastBounds = { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) };
-    if (arenaVisible) activeView()?.setBounds(lastBounds);
-    return true;
+  const { ArenaBrowserService } = require('./arena-browser-service');
+  arena = new ArenaBrowserService({ WebContentsView, getWindow: () => arenaWindow?.window,
+    changed: value => { arenaWindow?.update(value); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mrgoose:tabs:changed', value); } });
+  const { createArenaWindow } = require('./arena-window');
+  arenaWindow = createArenaWindow({ BrowserWindow, ipcMain, browser: arena, isQuitting: () => quitting, openCockpit: showCockpit });
+  const handle = (name, action) => ipcMain.handle(name, (event, args = {}) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('UNAUTHORIZED_IPC');
+    return action(args);
   });
-  ipcMain.handle('mrgoose:tabs:setVisible', (_e, { visible }) => { arenaVisible = !!visible; applyVisibility(); return true; });
+  handle('mrgoose:tabs:create', async ({ url }) => { const id = await arena.create(url); arenaWindow.show(id); return id; });
+  handle('mrgoose:tabs:select', ({ tabId }) => { arenaWindow.show(tabId); return arena.list(); });
+  handle('mrgoose:tabs:show', () => arenaWindow.show());
+  handle('mrgoose:tabs:close', ({ tabId }) => arena.close(tabId));
+  handle('mrgoose:tabs:list', () => arena.list());
+  handle('mrgoose:tabs:loadUrl', ({ tabId, url }) => arena.loadUrl(tabId, url));
+  // Older cockpit panes cannot move or hide the separate Arena window.
+  handle('mrgoose:tabs:setBounds', () => true);
+  handle('mrgoose:tabs:setVisible', () => true);
+  for (const [channel, operation] of Object.entries({ fillField: 'fill', readDom: 'read', snapshotConversation: 'snapshot', highlightSendButton: 'highlight', pickElement: 'pick' })) {
+    handle('mrgoose:' + channel, async ({ tabId, selector, value }) => {
+      try {
+        if (operation === 'fill' && arena.entry(tabId).attemptId) throw Object.assign(new Error('MCP attempt inputs are immutable; prepare a new attempt.'), { code: 'ATTEMPT_TAB_LOCKED' });
+        return await arena.page(tabId, operation, { selector, value, limit: 16000 });
+      } catch (error) { return { ok: false, code: error.code || 'PAGE_ERROR', note: error.message }; }
+    });
+  }
+  handle('mrgoose:mcp:status', () => control.management());
+  handle('mrgoose:mcp:profile', profile => control.saveProfile(profile));
+}
 
-  // FILL + READ bridge — deliberately no send/launch/submit
-  ipcMain.handle('mrgoose:fillField', (_e, { selector, value }) => runInActive(() => `
-    (() => {
-      const sel = ${JSON.stringify(selector)}, val = ${JSON.stringify(value)};
-      const el = document.querySelector(sel);
-      if (!el) return { ok: false, note: 'selector not found' };
-      if (el.isContentEditable) {
-        el.focus(); el.textContent = val;
-        el.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      } else {
-        const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement : HTMLInputElement;
-        const d = Object.getOwnPropertyDescriptor(proto.prototype, 'value');
-        d.set.call(el, val);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      return { ok: true };
-    })()`));
-
-  ipcMain.handle('mrgoose:readDom', (_e, { selector }) => runInActive(() => `
-    (() => {
-      const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) return { ok: false, note: 'selector not found' };
-      return { ok: true, text: (el.value ?? el.innerText ?? '').slice(0, 20000) };
-    })()`));
-
-  ipcMain.handle('mrgoose:snapshotConversation', (_e, { selector }) => runInActive(() => `
-    (() => {
-      const root = ${JSON.stringify(selector || 'body')};
-      const el = document.querySelector(root) || document.body;
-      return { ok: true, text: (el.innerText || '').slice(0, 40000) };
-    })()`));
-
-  ipcMain.handle('mrgoose:highlightSendButton', (_e, { selector }) => runInActive(() => `
-    (() => {
-      const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) return { ok: false, note: 'selector not found' };
-      el.scrollIntoView({ block: 'center' });
-      const prev = el.style.outline;
-      el.style.outline = '3px solid #b6f23d';
-      el.style.outlineOffset = '2px';
-      setTimeout(() => { el.style.outline = prev; }, 2500);
-      return { ok: true };
-    })()`));
-
-  // pick-element: resolve the next click's robust selector (for building SelectorProfiles)
-  ipcMain.handle('mrgoose:pickElement', () => runInActive(() => `
-    new Promise((resolve) => {
-      const sel = (el) => {
-        if (el.id) return '#' + CSS.escape(el.id);
-        const parts = [];
-        while (el && el.nodeType === 1 && el.tagName !== 'HTML') {
-          let p = el.tagName.toLowerCase();
-          if (el.name) { p += '[name=' + JSON.stringify(el.getAttribute('name')) + ']'; parts.unshift(p); break; }
-          const sibs = [...el.parentNode.children].filter(c => c.tagName === el.tagName);
-          if (sibs.length > 1) p += ':nth-of-type(' + (sibs.indexOf(el) + 1) + ')';
-          parts.unshift(p);
-          el = el.parentElement;
-        }
-        return parts.join(' > ');
-      };
-      const onClick = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        document.removeEventListener('click', onClick, true);
-        resolve({ ok: true, selector: sel(e.target), text: (e.target.innerText || e.target.value || '').slice(0, 80) });
-      };
-      document.addEventListener('click', onClick, true);
-    })`));
+async function startControl() {
+  if (control) return;
+  const { LocalControl } = require('./local-control');
+  const candidate = new LocalControl({ directory: path.join(PROJECT_ROOT, 'data', 'mcp'), browser: arena,
+    runtimePath: process.execPath, adapterPath: path.join(PROJECT_ROOT, 'mcp', 'server.cjs'),
+    hide: () => arenaWindow.hide(),
+    present: async tabId => arenaWindow.show(tabId),
+    data: async (operation, args) => {
+      const response = await fetch(BACKEND_URL + '/api/control/' + operation, { method: 'POST',
+        headers: { Authorization: 'Bearer ' + backendToken, 'Content-Type': 'application/json' }, body: JSON.stringify(args), signal: AbortSignal.timeout(10000) });
+      const value = await response.json();
+      if (!response.ok) throw Object.assign(new Error(value.message || value.code || 'BACKEND_ERROR'), { code: value.code || 'BACKEND_ERROR' });
+      return value;
+    } });
+  await candidate.start();
+  const { Tray, Menu } = require('electron');
+  tray = new Tray(path.join(__dirname, 'icon.ico'));
+  tray.setToolTip('MrGoose — running');
+  const show = () => { void showCockpit().catch(error => console.error('[mrgoose] workspace:', error.message)); };
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Show workspace', click: show }, { label: 'Show Arena', click: () => arenaWindow.show() }, { label: 'Hide Arena', click: () => arenaWindow.hide() }, { type: 'separator' }, { label: 'Quit MrGoose', click: () => app.quit() }]));
+  tray.on('double-click', show);
+  control = candidate;
 }
 
 // ───────────────────────── window ─────────────────────────
@@ -199,9 +126,12 @@ async function createWindow() {
     width: 1480, height: 940, show: false,
     backgroundColor: '#0a0a0b', title: 'Mr Goose', autoHideMenuBar: true,
     icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, additionalArguments: ['--mrgoose-backend-token=' + backendToken] },
   });
   mainWindow = window;
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  window.webContents.on('will-navigate', (event, url) => { if (new URL(url).origin !== new URL(RENDERER_URL).origin) event.preventDefault(); });
+  window.on('close', event => { if (!quitting && control) { event.preventDefault(); window.hide(); } });
   window.on('closed', () => { if (mainWindow === window) mainWindow = null; });
   const painted = new Promise(resolve => window.once('ready-to-show', resolve));
   try {
@@ -214,9 +144,25 @@ async function createWindow() {
   }
 }
 
+async function showCockpit() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    cockpitOpening ||= createWindow().finally(() => { cockpitOpening = null; });
+    await cockpitOpening;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show(); mainWindow.focus();
+}
+
 app.whenReady().then(async () => {
+  if (!app.requestSingleInstanceLock()) { app.quit(); return; }
+  app.on('second-instance', (_event, argv) => { if (argv.includes('--arena-only')) { if (arenaWindow?.window) arenaWindow.show(); } else void showCockpit().catch(error => console.error(error.message)); });
   if (process.platform === 'win32') app.setAppUserModelId('com.mrgoose.cockpit');
   registerBridge();
+  if (!process.env.MRGOOSE_RENDERER_URL) {
+    const { startCockpitServer } = require('./cockpit-server');
+    cockpitServer = await startCockpitServer(path.join(PROJECT_ROOT, 'client', 'dist', 'client', 'browser'));
+    if (cockpitServer) RENDERER_URL = cockpitServer.url;
+  }
   startup = createStartupController({ app, BrowserWindow, ipcMain, directory: __dirname });
   await startup.open(async report => {
     report('service');
@@ -225,15 +171,19 @@ app.whenReady().then(async () => {
     if (quitting) return null;
     if (!healthy) throw new Error('The local service did not respond. Check the backend log and retry.');
     report('workspace');
-    return createWindow();
+    if (!arenaWindow.window) await arenaWindow.create();
+    await startControl();
+    if (process.argv.includes('--arena-only')) return arenaWindow.window;
+    // Normal app launches always open the workspace. The hidden Arena host is shown
+    // only by an explicit arena request (for example arena_open_tab/attempt_present).
+    await showCockpit();
+    return mainWindow;
   });
   app.on('activate', () => {
-    if (!quitting && BrowserWindow.getAllWindows().length === 0) {
-      createWindow().then(window => window.show()).catch(error => console.error('[mrgoose] window failed:', error));
-    }
+    if (!quitting) void showCockpit().catch(error => console.error(error.message));
   });
 }).catch(error => { console.error('[mrgoose] startup error:', error); app.quit(); });
 
 app.on('window-all-closed', () => { stopBackend(); if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => { quitting = true; startup?.cancel(); stopBackend(); });
+app.on('before-quit', () => { quitting = true; startup?.cancel(); void control?.stop(); cockpitServer?.close(); tray?.destroy(); stopBackend(); });
 process.on('exit', stopBackend);

@@ -60,21 +60,28 @@ export interface BridgeResult { ok: boolean; note?: string; text?: string; selec
 
 export interface MrGooseApi {
   backendUrl: string;
+  backendToken?: string;
+  mcp?: {
+    status(): Promise<{ profiles: unknown[]; enabled: boolean; command: string; args: string[]; env: Record<string, string> }>;
+    saveProfile(profile: unknown): Promise<void>;
+  };
   tabs: {
     create(url?: string): Promise<string>;
     select(id: string): Promise<ArenaTab[]>;
     close(id: string): Promise<ArenaTab[]>;
     list(): Promise<ArenaTab[]>;
+    show?(): Promise<void>;
+    onChanged?: (callback: (tabs: ArenaTab[]) => void) => () => void;
     loadUrl(id: string, url: string): Promise<boolean>;
     setBounds(rect: { x: number; y: number; width: number; height: number }): Promise<boolean>;
     setVisible(visible: boolean): Promise<boolean>;
   };
   bridge: {
-    fillField(selector: string, value: string): Promise<BridgeResult>;
-    readDom(selector: string): Promise<BridgeResult>;
-    snapshotConversation(selector?: string): Promise<BridgeResult>;
-    highlightSendButton(selector: string): Promise<BridgeResult>;
-    pickElement(): Promise<BridgeResult>;
+    fillField(tabId: string, selector: string, value: string): Promise<BridgeResult>;
+    readDom(tabId: string, selector: string): Promise<BridgeResult>;
+    snapshotConversation(tabId: string, selector?: string): Promise<BridgeResult>;
+    highlightSendButton(tabId: string, selector: string): Promise<BridgeResult>;
+    pickElement(tabId: string): Promise<BridgeResult>;
   };
 }
 

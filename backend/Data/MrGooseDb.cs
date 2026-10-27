@@ -30,9 +30,13 @@ public class MrGooseDb(DbContextOptions<MrGooseDb> options) : DbContext(options)
     public DbSet<OpenRouterKey> OpenRouterKeys => Set<OpenRouterKey>();
 
     public DbSet<AgentFile> AgentFiles => Set<AgentFile>();
+    public DbSet<ControlAttempt> ControlAttempts => Set<ControlAttempt>();
+    public DbSet<ControlObservation> ControlObservations => Set<ControlObservation>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<ControlAttempt>().HasIndex(x => new { x.Owner, x.RequestKey }).IsUnique();
+        b.Entity<ControlObservation>().HasIndex(x => new { x.AttemptId, x.RequestKey }).IsUnique();
         b.Entity<AgentFile>().HasIndex(f => f.SessionId);
         b.Entity<AppSetting>().HasKey(x => x.Key);
         b.Entity<Challenge>().HasIndex(c => c.Slug).IsUnique();

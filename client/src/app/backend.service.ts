@@ -33,7 +33,7 @@ export class BackendService {
   async checkHealth(): Promise<void> {
     this.health.set('checking');
     try {
-      const res = await fetch(`${this.backendUrl}/health`);
+      const res = await fetch(`${this.backendUrl}/health`, { headers: window.mrgoose?.backendToken ? { Authorization: `Bearer ${window.mrgoose.backendToken}` } : {} });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await res.json();
       this.backendVersion.set(body.version ?? '—');
@@ -46,7 +46,7 @@ export class BackendService {
   private async connectHub(): Promise<void> {
     this.hub.set('connecting');
     this.connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${this.backendUrl}/hub/agent`)
+      .withUrl(`${this.backendUrl}/hub/agent`, { accessTokenFactory: () => window.mrgoose?.backendToken || '' })
       .withAutomaticReconnect()
       .build();
 

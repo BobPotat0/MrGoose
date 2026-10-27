@@ -5,14 +5,22 @@
   "description": "Mr Goose — Gray Swan arena red-team cockpit (Electron shell + Angular renderer + C# backend sidecar).",
   "main": "electron/main.js",
   "scripts": {
+    "start": "npm run build:backend && electron electron/main.js",
+    "start:cockpit": "npm run build:backend && electron electron/main.js --cockpit",
+    "start:arena": "npm run build:backend && electron electron/main.js --arena-only",
     "build:backend": "dotnet build backend/MrGoose.Backend.csproj -c Debug",
     "dev:client": "npm --prefix client start",
     "dev:electron": "wait-on http://localhost:4200 && electron electron/main.js",
     "dev": "npm run build:backend && concurrently -k -n CLIENT,ELECTRON -c green,magenta \"npm:dev:client\" \"npm:dev:electron\""
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
     "concurrently": "^9.1.0",
     "electron": "^33.2.0",
     "wait-on": "^8.0.1"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.6.7"
   }
 }

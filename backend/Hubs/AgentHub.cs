@@ -19,7 +19,7 @@ public sealed class AgentHub(MrGooseDb db, OpenRouterClient openRouter, CraftSer
     private const int MaxRounds = 6;
 
     // pending client-mediated page actions for the Mr Goose Agent (keyed by action id)
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<string>> PagePending = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string ConnectionId, TaskCompletionSource<string> Completion)> PagePending = new();
 
     /// <summary>The Mr Goose Agent: a tool-using loop over the whole app. DATA tools run server-side;
     /// PAGE tools (arena_*) are executed by the client via the Electron bridge and returned here.</summary>
@@ -83,7 +83,7 @@ public sealed class AgentHub(MrGooseDb db, OpenRouterClient openRouter, CraftSer
     {
         var id = Guid.NewGuid().ToString("N");
         var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        PagePending[id] = tcs;
+        PagePending[id] = (Context.ConnectionId, tcs);
         await Clients.Caller.SendAsync("agentPageAction", new { id, name, args = argsJson });
         var done = await Task.WhenAny(tcs.Task, Task.Delay(60000));
         if (done != tcs.Task) { PagePending.TryRemove(id, out _); return "[page action timed out]"; }
@@ -93,7 +93,7 @@ public sealed class AgentHub(MrGooseDb db, OpenRouterClient openRouter, CraftSer
     /// <summary>The client returns the result of a page action it executed via the Electron bridge.</summary>
     public Task AgentPageResult(string id, string result)
     {
-        if (PagePending.TryRemove(id, out var tcs)) tcs.TrySetResult(result);
+        if (PagePending.TryGetValue(id, out var pending) && pending.ConnectionId == Context.ConnectionId && PagePending.TryRemove(id, out _)) pending.Completion.TrySetResult(result);
         return Task.CompletedTask;
     }
 

@@ -1,13 +1,12 @@
-import { AfterViewInit, Component, ElementRef, EventEmitter, OnDestroy, Output, ViewChild, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, EventEmitter, OnDestroy, Output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ArenaService } from './arena.service';
 import { ApiService } from './api.service';
 import { ArenaTab } from './models';
 
 /**
- * Reusable embedded-arena pane: tab strip + the native WebContentsView host (bounds-synced) +
- * pick-element. Dropped beside the crafter in Attack / Chatbot so the page and the cockpit are
- * co-visible. Fill/read happen from the crafter via ArenaService; this pane owns embedding + tabs.
+ * Cockpit controls for the separate Arena window. Native views and their bounds are owned
+ * by Electron, independent of this component's route, visibility and layout.
  */
 @Component({
   selector: 'mg-arena-pane',
@@ -22,13 +21,11 @@ import { ArenaTab } from './models';
           <span class="chip act" [class.lime]="t.active" (click)="select(t.id)">{{ short(t.title || 'tab') }} <a (click)="close(t.id); $event.stopPropagation()">✕</a></span>
         }
         <span class="grow"></span>
+        <button class="btn" (click)="show()">open Arena window</button>
         <button class="btn" (click)="newTab()">+ tab</button>
         <button class="btn" (click)="pick()">pick element</button>
       </div>
-      <div #host style="flex:1;min-height:360px;border:1px solid var(--border);border-radius:var(--radius-lg);
-           display:flex;align-items:center;justify-content:center;color:var(--text-mute)" class="mono">
-        open a tab to embed the real arena page here
-      </div>
+      <p class="muted">Arena runs in its own window. Review and launch there manually.</p>
       @if (pickedSel()) { <p class="mono dim" style="margin-top:6px;font-size:11px">picked → {{ pickedSel() }}</p> }
     }
   `,
@@ -37,37 +34,26 @@ import { ArenaTab } from './models';
 export class ArenaPaneComponent implements AfterViewInit, OnDestroy {
   private arena = inject(ArenaService);
   private api = inject(ApiService);
-  @ViewChild('host') hostRef?: ElementRef<HTMLElement>;
   @Output() picked = new EventEmitter<string>();
 
   readonly available = this.arena.available;
   readonly tabs = signal<ArenaTab[]>([]);
   readonly pickedSel = signal('');
   arenaUrl = 'https://app.grayswan.ai/arena/challenge/ipi-black-2026';
-  private ro?: ResizeObserver;
-  private onMove = () => this.sync();
+  private unsubscribe?: () => void;
 
   async ngAfterViewInit() {
     if (!this.available) return;
     try { this.arenaUrl = (await this.api.settings()).arenaUrl || this.arenaUrl; } catch { /* backend down */ }
     this.tabs.set(await this.arena.list());
-    await this.arena.setVisible(true);
-    this.sync();
-    this.ro = new ResizeObserver(() => this.sync());
-    if (this.hostRef) this.ro.observe(this.hostRef.nativeElement);
-    window.addEventListener('resize', this.onMove);
-    window.addEventListener('scroll', this.onMove, true);
+    this.unsubscribe = this.arena.onChanged(tabs => this.tabs.set(tabs));
   }
   ngOnDestroy() {
-    this.arena.setVisible(false);
-    this.ro?.disconnect();
-    window.removeEventListener('resize', this.onMove);
-    window.removeEventListener('scroll', this.onMove, true);
+    this.unsubscribe?.();
   }
-  private sync() { const r = this.hostRef?.nativeElement.getBoundingClientRect(); if (r) this.arena.setBounds({ x: r.x, y: r.y, width: r.width, height: r.height }); }
-
-  async newTab() { await this.arena.create(this.arenaUrl); this.tabs.set(await this.arena.list()); this.sync(); }
-  async select(id: string) { this.tabs.set(await this.arena.select(id)); this.sync(); }
+  show() { return this.arena.show(); }
+  async newTab() { await this.arena.create(this.arenaUrl); this.tabs.set(await this.arena.list()); }
+  async select(id: string) { this.tabs.set(await this.arena.select(id)); }
   async close(id: string) { this.tabs.set(await this.arena.close(id)); }
   async pick() { const r = await this.arena.pick(); if (r.selector) { this.pickedSel.set(r.selector); this.picked.emit(r.selector); } }
   short(s: string) { return s.length > 18 ? s.slice(0, 18) + '…' : s; }

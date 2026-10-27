@@ -160,15 +160,18 @@ export class AgentChatStore {
     let args: any = {};
     try { args = JSON.parse(a.args || '{}'); } catch { /* */ }
     let res: any;
+    try {
+    if (['arena_fill', 'arena_read', 'arena_snapshot', 'arena_pick'].includes(a.name) && !args.tabId) throw new Error('Explicit tabId required');
     if (a.name === 'arena_open_tab') { const id = await this.arena.create(args.url); res = { ok: !!id, note: id ? `opened ${id}` : 'failed' }; }
-    else if (a.name === 'arena_fill') res = await this.arena.fill(args.selector, args.value);
-    else if (a.name === 'arena_read') res = await this.arena.read(args.selector);
-    else if (a.name === 'arena_snapshot') res = await this.arena.snapshot(args.selector);
-    else if (a.name === 'arena_pick') res = await this.arena.pick();
+    else if (a.name === 'arena_fill') res = await this.arena.fill(args.selector, args.value, args.tabId);
+    else if (a.name === 'arena_read') res = await this.arena.read(args.selector, args.tabId);
+    else if (a.name === 'arena_snapshot') res = await this.arena.snapshot(args.selector, args.tabId);
+    else if (a.name === 'arena_pick') res = await this.arena.pick(args.tabId);
     else if (a.name === 'arena_list_tabs') res = { ok: true, note: JSON.stringify(await this.arena.list()) };
     else if (a.name === 'arena_select_tab') res = { ok: true, note: JSON.stringify(await this.arena.select(args.id)) };
     else if (a.name === 'arena_close_tab') res = { ok: true, note: JSON.stringify(await this.arena.close(args.id)) };
     else res = { ok: false, note: 'unknown page action' };
+    } catch (error) { res = { ok: false, note: error instanceof Error ? error.message : 'Page action failed' }; }
     this.view.update(v => [...v, { type: 'tool', text: `page ${a.name} → ${res.ok ? 'ok' : (res.note || 'failed')}` }]);
     this.save();
     this.backend.agentPageResult(a.id, JSON.stringify(res));

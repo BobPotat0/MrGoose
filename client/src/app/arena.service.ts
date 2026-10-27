@@ -13,6 +13,7 @@ export class ArenaService {
   readonly available = !!window.mrgoose?.tabs;
 
   list(): Promise<ArenaTab[]> { return this.m?.tabs.list() ?? Promise.resolve([]); }
+  show() { return this.m?.tabs.show?.() ?? Promise.resolve(); }
   create(url?: string): Promise<string | undefined> { return this.m?.tabs.create(url) ?? Promise.resolve(undefined); }
   select(id: string): Promise<ArenaTab[]> { return this.m?.tabs.select(id) ?? Promise.resolve([]); }
   close(id: string): Promise<ArenaTab[]> { return this.m?.tabs.close(id) ?? Promise.resolve([]); }
@@ -20,9 +21,12 @@ export class ArenaService {
   setBounds(rect: { x: number; y: number; width: number; height: number }) { return this.m?.tabs.setBounds(rect) ?? Promise.resolve(false); }
   setVisible(visible: boolean) { return this.m?.tabs.setVisible(visible) ?? Promise.resolve(false); }
 
-  fill(selector: string, value: string): Promise<BridgeResult> { return this.m?.bridge.fillField(selector, value) ?? Promise.resolve(NOT_ELECTRON); }
-  read(selector: string): Promise<BridgeResult> { return this.m?.bridge.readDom(selector) ?? Promise.resolve(NOT_ELECTRON); }
-  snapshot(selector?: string): Promise<BridgeResult> { return this.m?.bridge.snapshotConversation(selector) ?? Promise.resolve(NOT_ELECTRON); }
-  highlight(selector: string): Promise<BridgeResult> { return this.m?.bridge.highlightSendButton(selector) ?? Promise.resolve(NOT_ELECTRON); }
-  pick(): Promise<BridgeResult> { return this.m?.bridge.pickElement() ?? Promise.resolve(NOT_ELECTRON); }
+  onChanged(callback: (tabs: ArenaTab[]) => void) { return this.m?.tabs.onChanged?.(callback) ?? (() => {}); }
+  // UI captures its current selection once. Agent/MCP callers pass their explicit tab ID.
+  private async target(tabId?: string) { return tabId ?? (await this.list()).find(t => t.active)?.id; }
+  async fill(selector: string, value: string, tabId?: string): Promise<BridgeResult> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.fillField(id, selector, value) : NOT_ELECTRON; }
+  async read(selector: string, tabId?: string): Promise<BridgeResult> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.readDom(id, selector) : NOT_ELECTRON; }
+  async snapshot(selector?: string, tabId?: string): Promise<BridgeResult> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.snapshotConversation(id, selector) : NOT_ELECTRON; }
+  async highlight(selector: string, tabId?: string): Promise<BridgeResult> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.highlightSendButton(id, selector) : NOT_ELECTRON; }
+  async pick(tabId?: string): Promise<BridgeResult> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.pickElement(id) : NOT_ELECTRON; }
 }

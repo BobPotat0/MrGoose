@@ -119,10 +119,10 @@ public class AgentService(MrGooseDb db, CraftService craft, OpenRouterClient ope
         Fn("web_search", "Search the web (via OpenRouter online) and return findings with sources. Use it to discover new jailbreak/IPI techniques, then add them with create_technique.", new JsonObject { ["query"] = P("string", "search query") }, "query");
         // page (client-mediated)
         Fn("arena_open_tab", "Open an embedded arena tab (optionally at a URL).", new JsonObject { ["url"] = P("string", "optional") });
-        Fn("arena_fill", "Fill a field on the active arena tab (NEVER sends).", new JsonObject { ["selector"] = P("string", ""), ["value"] = P("string", "") }, "selector", "value");
-        Fn("arena_read", "Read an element's text/value on the active arena tab.", new JsonObject { ["selector"] = P("string", "") }, "selector");
-        Fn("arena_snapshot", "Snapshot the conversation/page text on the active arena tab.", new JsonObject { ["selector"] = P("string", "optional") });
-        Fn("arena_pick", "Ask the operator to click a field on the arena page; returns its CSS selector.", O());
+        Fn("arena_fill", "Fill a field on an explicit arena tab (NEVER sends).", new JsonObject { ["tabId"] = P("string", "id from arena_list_tabs"), ["selector"] = P("string", ""), ["value"] = P("string", "") }, "tabId", "selector", "value");
+        Fn("arena_read", "Read an element's text/value on an explicit arena tab.", new JsonObject { ["tabId"] = P("string", ""), ["selector"] = P("string", "") }, "tabId", "selector");
+        Fn("arena_snapshot", "Snapshot bounded page text on an explicit arena tab; does not establish run completion.", new JsonObject { ["tabId"] = P("string", ""), ["selector"] = P("string", "optional") }, "tabId");
+        Fn("arena_pick", "Ask the operator to click a field on an explicit arena tab; returns its CSS selector.", new JsonObject { ["tabId"] = P("string", "") }, "tabId");
         Fn("arena_list_tabs", "List the open embedded arena tabs.", O());
         Fn("arena_select_tab", "Front an embedded arena tab by id.", new JsonObject { ["id"] = P("string", "") }, "id");
         Fn("arena_close_tab", "Close an embedded arena tab by id.", new JsonObject { ["id"] = P("string", "") }, "id");

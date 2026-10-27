@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using MrGoose.Backend;
 using MrGoose.Backend.Data;
@@ -18,7 +20,9 @@ if (!builder.Configuration.AsEnumerable().Any(kv =>
     builder.WebHost.UseUrls(DefaultUrl);
 }
 
-var dbPath = Path.Combine(AppContext.BaseDirectory, "mrgoose.db");
+var dbPath = builder.Configuration["MRGOOSE_DB_PATH"] ?? Path.Combine(AppContext.BaseDirectory, "mrgoose.db");
+// SignalR may put its access token in the WebSocket query. Do not log request URLs.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddDbContext<MrGooseDb>(o => o.UseSqlite($"Data Source={dbPath}"));
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<OpenRouterClient>();
@@ -27,14 +31,18 @@ builder.Services.AddScoped<CraftService>();
 builder.Services.AddScoped<FinderService>();
 builder.Services.AddScoped<AgentService>();
 builder.Services.AddScoped<AgentFileService>();
+builder.Services.AddScoped<LibraryQueryService>();
 builder.Services.AddSignalR();
 
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
 const string CorsPolicy = "mrgoose-local";
+var rendererOrigin = builder.Configuration["MRGOOSE_RENDERER_ORIGIN"] ?? "http://localhost:4200";
+var controlToken = builder.Configuration["MRGOOSE_CONTROL_TOKEN"] ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+var instanceId = builder.Configuration["MRGOOSE_INSTANCE_ID"] ?? Guid.NewGuid().ToString("N");
 builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy => policy
-    .SetIsOriginAllowed(_ => true)
+    .WithOrigins(rendererOrigin)
     .AllowAnyHeader()
     .AllowAnyMethod()
     .AllowCredentials()));
@@ -46,6 +54,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<MrGooseDb>();
     db.Database.EnsureCreated();
     db.Database.ExecuteSqlRaw(AgentFileService.SchemaSql);
+    ControlEndpoints.EnsureSchema(db);
     // lightweight column add for existing DBs (EnsureCreated won't migrate) — keeps the operator's data
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN WaveBreaksJson TEXT NOT NULL DEFAULT '{}'"); } catch { /* column already exists */ }
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN Wave TEXT NOT NULL DEFAULT ''"); } catch { /* column already exists */ }
@@ -54,11 +63,26 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseCors(CorsPolicy);
+app.Use(async (context, next) =>
+{
+    if (context.Connection.RemoteIpAddress is not { } ip || !System.Net.IPAddress.IsLoopback(ip)
+        || context.Request.Host.Host is not ("127.0.0.1" or "localhost" or "[::1]"))
+    { context.Response.StatusCode = 403; return; }
+    var origin = context.Request.Headers.Origin.ToString();
+    if (origin.Length > 0 && origin != rendererOrigin) { context.Response.StatusCode = 403; return; }
+    var supplied = context.Request.Headers.Authorization.ToString();
+    if (supplied.StartsWith("Bearer ", StringComparison.Ordinal)) supplied = supplied[7..];
+    else supplied = context.Request.Path.StartsWithSegments("/hub/agent") ? context.Request.Query["access_token"].ToString() : "";
+    if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(supplied), Encoding.UTF8.GetBytes(controlToken)))
+    { context.Response.StatusCode = 401; return; }
+    await next();
+});
 
 var version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0";
-app.MapGet("/health", () => Results.Json(new { status = "ok", app = "Mr Goose Backend", version, utc = DateTimeOffset.UtcNow }));
+app.MapGet("/health", () => Results.Json(new { status = "ok", app = "Mr Goose Backend", version, instanceId, utc = DateTimeOffset.UtcNow }));
 
 app.MapApi();
+app.MapControl();
 app.MapHub<AgentHub>("/hub/agent");
 
 app.Run();

@@ -32,6 +32,7 @@ test('Electron profile stays under the checkout and is configured before readine
     require(name) {
       if (name === 'electron') return { app: electronApp };
       if (name === 'node:path') return path;
+      if (name === 'node:crypto') return require(name);
       if (name === './startup-controller') return require('../electron/startup-controller');
       if (name === 'node:fs') return { mkdirSync(directory) { directories.add(directory); } };
       if (name === 'node:child_process') return { spawn() { throw new Error('No processes should be launched in this check'); } };
@@ -39,6 +40,7 @@ test('Electron profile stays under the checkout and is configured before readine
     },
     process: { env: {}, platform: process.platform, on() {}, cwd() { throw new Error('Do not resolve storage from the invoking directory'); } },
     console,
+    URL,
   }, { filename: 'electron/main.js' });
   assert.equal(readyRequested, true);
   assert.equal(configured.get('userData'), path.join(root, 'data', 'desktop'));

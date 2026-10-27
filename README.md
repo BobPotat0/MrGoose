@@ -44,6 +44,11 @@ MRGOOSE/
 
 ## Run (dev)
 
+For external AI clients, see [Local MCP setup and limits](mcp/README.md). Normal app startup
+(`npm start`) opens the workspace. The separate Arena window is shown when requested by the agent.
+MCP uses the client's own model with automatic current-user local access. Launch/Submit stays manual.
+Closing either window hides it; use the tray's **Quit MrGoose** to stop the app.
+
 ```bash
 npm run dev
 ```
@@ -53,6 +58,8 @@ Electron, which spawns the backend sidecar (`http://127.0.0.1:5174`), waits for 
 the cockpit. The top bar shows **backend ok** + **hub connected** when the handshake succeeds.
 
 Run pieces individually: `npm run build:backend`, `npm run dev:client`, `npm run dev:electron`.
+Use `npm start` for the workspace and `npm run start:arena` for explicit lightweight Arena/MCP mode.
+A static client build (`npm --prefix client run build`) avoids needing the Angular dev server.
 
 ## Roadmap
 
