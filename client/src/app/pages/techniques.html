@@ -1,0 +1,267 @@
+<section class="page library-page">
+  <header class="library-head">
+    <div>
+      <span class="label-mono">Libraries / Techniques</span>
+      <h1>
+        Technique Library <span class="count">{{ items().length }}</span>
+      </h1>
+      <p class="sub">Find the right technique. Keep the mechanism, context and example together.</p>
+    </div>
+    <div class="row">
+      <details class="manage">
+        <summary class="btn">Manage library</summary>
+        <div class="manage-menu">
+          <button class="btn" (click)="tagEditor.set(!tagEditor())">Manage tags</button
+          ><button class="btn" (click)="export()">Export JSON</button
+          ><button class="btn" (click)="importInput.click()">Import JSON</button
+          ><button class="btn danger" (click)="reset()">Reset built-ins</button>
+        </div>
+      </details>
+      <input #importInput type="file" accept=".json" hidden (change)="import($event)" /><button
+        class="btn primary"
+        (click)="startNew()"
+      >
+        + New technique
+      </button>
+    </div>
+  </header>
+  <!-- tag registry editor -->
+  @if (tagEditor()) {
+    <div class="card alt">
+      <span class="label-mono">tag registry</span>
+      <div class="row" style="flex-wrap: wrap; gap: 8px; margin-top: 10px">
+        @for (t of tags(); track t.id) {
+          <div
+            class="row"
+            style="
+              gap: 6px;
+              border: 1px solid var(--surface-3);
+              border-radius: 6px;
+              padding: 4px 8px;
+            "
+          >
+            <input
+              type="color"
+              [(ngModel)]="t.color"
+              (change)="saveTag(t)"
+              style="width: 26px; height: 26px; border: none; background: none; padding: 0"
+            />
+            <span class="mono" style="min-width: 90px">{{ t.key }}</span>
+            <input
+              class="input"
+              style="max-width: 220px"
+              [(ngModel)]="t.description"
+              (blur)="saveTag(t)"
+              placeholder="description"
+            />
+            <button class="btn danger" (click)="delTag(t)">×</button>
+          </div>
+        }
+      </div>
+      <div class="row" style="margin-top: 10px">
+        <input
+          class="input"
+          style="max-width: 150px"
+          [(ngModel)]="newTag.key"
+          placeholder="new-tag-key"
+        />
+        <input
+          type="color"
+          [(ngModel)]="newTag.color"
+          style="width: 32px; height: 32px; border: none; background: none"
+        />
+        <input class="input grow" [(ngModel)]="newTag.description" placeholder="description" />
+        <button class="btn primary" (click)="addTag()" [disabled]="!newTag.key?.trim()">
+          + tag
+        </button>
+      </div>
+    </div>
+  }
+
+  @if (editorOpen()) {
+    <form class="card editor-panel" (ngSubmit)="save()">
+      <div class="row spread">
+        <h2>{{ editingId() ? 'Edit technique' : 'New technique' }}</h2>
+        <span class="dim">{{
+          editingId() ? 'Update the selected entry' : 'Add to your existing library'
+        }}</span>
+      </div>
+      <div class="editor-grid">
+        <label class="field"
+          >Title<input class="input" name="title" [(ngModel)]="draft.title" required
+        /></label>
+        <label class="field"
+          >Summary<textarea class="textarea" name="summary" [(ngModel)]="draft.summary"></textarea>
+        </label>
+        <label class="field"
+          >When it works<textarea
+            class="textarea"
+            name="whenItWorks"
+            [(ngModel)]="draft.whenItWorks"
+            placeholder="Conditions where this technique is useful…"
+          ></textarea>
+        </label>
+        <label class="field"
+          >Example<textarea
+            class="textarea"
+            name="example"
+            [(ngModel)]="draft.example"
+            placeholder="Keep payload examples as literal text…"
+          ></textarea>
+        </label>
+      </div>
+      <div class="row tag-row">
+        <span class="dim">Tags</span>
+        @for (t of tags(); track t.id) {
+          <button
+            type="button"
+            class="chip tag-button"
+            [attr.aria-pressed]="draftTags().has(t.key)"
+            [class.chosen]="draftTags().has(t.key)"
+            [style.color]="t.color"
+            (click)="toggleDraftTag(t.key)"
+          >
+            {{ t.key }}
+          </button>
+        }
+      </div>
+      <div class="row editor-actions">
+        <button type="button" class="btn" (click)="resetDraft()" [disabled]="saving()">
+          Cancel</button
+        ><button class="btn primary" type="submit" [disabled]="saving() || !draft.title?.trim()">
+          {{ saving() ? 'Saving…' : editingId() ? 'Save changes' : 'Add technique' }}
+        </button>
+      </div>
+    </form>
+  }
+  <div class="library-toolbar">
+    <input
+      class="input search"
+      aria-label="Search techniques"
+      [ngModel]="search()"
+      (ngModelChange)="search.set($event)"
+      placeholder="Search techniques, examples or applicability…"
+    />
+    <div class="segments" aria-label="Technique source">
+      @for (f of sourceFilters; track f.value) {
+        <button
+          class="btn"
+          [class.active]="statusFilter() === f.value"
+          [attr.aria-pressed]="statusFilter() === f.value"
+          (click)="statusFilter.set(f.value)"
+        >
+          {{ f.label }}
+        </button>
+      }
+    </div>
+  </div>
+  <div class="row tag-row">
+    @for (t of tags(); track t.id) {
+      <button
+        class="chip tag-button"
+        [style.color]="t.color"
+        [class.chosen]="tagFilter().has(t.key)"
+        [attr.aria-pressed]="tagFilter().has(t.key)"
+        (click)="toggleTagFilter(t.key)"
+        [title]="t.description"
+      >
+        {{ t.key }}
+      </button>
+    }
+    @if (search() || tagFilter().size || statusFilter() !== 'all') {
+      <button class="clear" (click)="clearFilters()">Clear filters</button>
+    }
+  </div>
+  @if (error()) {
+    <div class="banner" role="alert">
+      {{ error() }} <button class="btn" (click)="load()">Retry</button>
+    </div>
+  }
+  @if (loading()) {
+    <div class="empty" role="status">Loading techniques…</div>
+  } @else {
+    <div class="library-workspace">
+      <section class="catalog" aria-label="Technique list">
+        <div class="catalog-heading">
+          <span class="label-mono">Techniques</span
+          ><span>{{ filtered().length }} of {{ items().length }}</span>
+        </div>
+        @for (t of filtered(); track t.id) {
+          <button
+            class="catalog-item"
+            [class.selected]="selected()?.id === t.id"
+            [attr.aria-pressed]="selected()?.id === t.id"
+            (click)="selectedId.set(t.id)"
+          >
+            <div class="row spread">
+              <strong>{{ t.title }}</strong
+              ><span class="origin">{{ t.builtin ? 'Built-in' : 'Custom' }}</span>
+            </div>
+            <p class="excerpt">{{ t.summary || 'No summary yet.' }}</p>
+            <div class="row tags">
+              @for (key of tagList(t); track key) {
+                <span class="chip" [style.color]="tagColor(key)">{{ key }}</span>
+              }
+            </div>
+          </button>
+        } @empty {
+          <div class="empty">
+            <h3>{{ items().length ? 'No matching techniques' : 'Your library starts here' }}</h3>
+            <p>
+              {{
+                items().length
+                  ? 'Try another search or clear the filters.'
+                  : 'Add a technique or import an existing library.'
+              }}
+            </p>
+          </div>
+        }
+      </section>
+      <article class="detail-panel" aria-label="Technique details">
+        @if (selected(); as t) {
+          <header class="detail-head">
+            <span class="label-mono">{{
+              t.builtin ? 'Built-in technique' : 'Custom technique'
+            }}</span>
+            <h2>{{ t.title }}</h2>
+            <div class="row">
+              @for (key of tagList(t); track key) {
+                <span class="chip" [style.color]="tagColor(key)">{{ key }}</span>
+              }
+              <span class="grow"></span
+              ><button class="btn" (click)="edit(t)">Edit technique</button>
+              @if (!t.builtin) {
+                <button class="btn danger" (click)="del(t)">Delete</button>
+              }
+            </div>
+          </header>
+          <div class="detail-sections">
+            <section>
+              <h3>Description</h3>
+              <p>{{ t.summary || 'No description added.' }}</p>
+            </section>
+            <section>
+              <h3>When it works</h3>
+              <p>{{ t.whenItWorks || 'No applicability notes added yet.' }}</p>
+            </section>
+            <section>
+              <div class="row spread">
+                <h3>Example</h3>
+                <button class="btn" (click)="copyExample(t)" [disabled]="!t.example">
+                  Copy example
+                </button>
+              </div>
+              <pre class="payload">{{ t.example || 'No example added.' }}</pre>
+            </section>
+          </div>
+        } @else {
+          <div class="empty">
+            <span class="label-mono">Technique details</span>
+            <h3>Select a technique to explore it</h3>
+            <p>Descriptions and examples appear here.</p>
+          </div>
+        }
+      </article>
+    </div>
+  }
+</section>

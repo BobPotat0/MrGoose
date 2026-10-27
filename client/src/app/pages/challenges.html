@@ -1,0 +1,378 @@
+<section class="page library-page">
+  <header class="library-head">
+    <div>
+      <span class="label-mono">Libraries / Challenges</span>
+      <h1>Challenge Library</h1>
+      <p class="sub">Browse objectives, success criteria and the surfaces available to you.</p>
+    </div>
+    <div class="row">
+      <button
+        class="btn"
+        (click)="importOpen.set(!importOpen())"
+        [attr.aria-expanded]="importOpen()"
+      >
+        Import page source</button
+      ><button
+        class="btn"
+        (click)="createOpen.set(!createOpen())"
+        [attr.aria-expanded]="createOpen()"
+      >
+        + New challenge</button
+      ><button class="btn primary" (click)="startNew()" [disabled]="!detail() || loading()">
+        + New objective
+      </button>
+    </div>
+  </header>
+  @if (createOpen()) {
+    <form class="card editor-panel" (ngSubmit)="createChallenge()">
+      <h2>New challenge</h2>
+      <div class="editor-grid">
+        <label class="field"
+          >Slug<input
+            class="input"
+            name="slug"
+            [(ngModel)]="newSlug"
+            placeholder="my-challenge"
+            required /></label
+        ><label class="field"
+          >Name<input class="input" name="name" [(ngModel)]="newName" required
+        /></label>
+      </div>
+      <div class="row editor-actions">
+        <button class="btn" type="button" (click)="createOpen.set(false)">Cancel</button
+        ><button class="btn primary" [disabled]="creating() || !newSlug.trim() || !newName.trim()">
+          {{ creating() ? 'Creating…' : 'Create challenge' }}
+        </button>
+      </div>
+    </form>
+  }
+  @if (importOpen()) {
+    <section class="card editor-panel">
+      <div class="row spread">
+        <h2>Import from Arena page source</h2>
+        <button class="btn" (click)="importOpen.set(false)">Close</button>
+      </div>
+      <p class="helper">
+        Model codenames belong to your account. Paste the Gray Swan chat page source (View Source /
+        Ctrl+U) to refresh your model roster, break matrix and scenario descriptions.
+      </p>
+      <label class="field"
+        >Page source<textarea
+          class="textarea"
+          [(ngModel)]="pageSrc"
+          placeholder="Paste the full page source…"
+        ></textarea>
+      </label>
+      <div class="row editor-actions">
+        <button
+          class="btn primary"
+          (click)="importPage()"
+          [disabled]="!pageSrc.trim() || importing()"
+        >
+          {{ importing() ? 'Importing…' : 'Import page source' }}
+        </button>
+      </div>
+      @if (importStatus()) {
+        <p class="helper" role="status">{{ importStatus() }}</p>
+      }
+    </section>
+  }
+  <div class="challenge-context">
+    <label class="field"
+      >Current challenge<select
+        class="input"
+        aria-label="Current challenge"
+        [disabled]="saving() || creating() || importing()"
+        [ngModel]="slug"
+        (ngModelChange)="changeChallenge($event)"
+      >
+        @for (c of challenges(); track c.slug) {
+          <option [value]="c.slug">{{ c.name }}</option>
+        }
+      </select></label
+    >
+    <div class="context-stats">
+      <span
+        ><strong>{{ detail()?.scenarios?.length ?? 0 }}</strong> objectives</span
+      ><span
+        ><strong>{{ detail()?.models?.length ?? 0 }}</strong> models</span
+      >
+      @if (detail()?.wave) {
+        <span>{{ detail()?.wave }}</span>
+      }
+    </div>
+  </div>
+  @if (editorOpen()) {
+    <!-- objective editor -->
+    <div class="card editor-panel objective-editor">
+      <span class="label-mono">{{ editingId() ? 'edit objective' : 'new objective' }}</span>
+      <div class="grid2" style="margin-top: 10px">
+        <div class="field">
+          <label>code<input class="input" [(ngModel)]="draft.code" placeholder="WB2S5" /></label>
+        </div>
+        <div class="field">
+          <label
+            >name<input
+              class="input"
+              [(ngModel)]="draft.name"
+              placeholder="Exfiltrate Customer Records"
+          /></label>
+        </div>
+        <div class="field">
+          <label
+            >type<select class="input" [(ngModel)]="draft.type">
+              <option value="ipi">ipi — injection scenario</option>
+              <option value="direct">direct — jailbreak behavior</option>
+            </select></label
+          >
+        </div>
+        <div class="field">
+          <label
+            >area<input
+              class="input"
+              [(ngModel)]="draft.area"
+              placeholder="white-box / black-box / direct"
+          /></label>
+        </div>
+      </div>
+      <div class="field" style="margin-top: 10px">
+        <label>objective<input class="input" [(ngModel)]="draft.objective" /></label>
+      </div>
+      <div class="field" style="margin-top: 10px">
+        <label>success criteria<input class="input" [(ngModel)]="draft.criteria" /></label>
+      </div>
+      @if (draft.type === 'ipi') {
+        <div class="field" style="margin-top: 10px">
+          <label
+            >benign task (the agent is given this)<input
+              class="input"
+              [(ngModel)]="draft.benignTask"
+          /></label>
+        </div>
+        <div class="field" style="margin-top: 10px">
+          <label
+            >required surface<input
+              class="input"
+              [(ngModel)]="draft.requiredSurface"
+              placeholder="e.g. gmail_send_email"
+          /></label>
+        </div>
+      } @else {
+        <div class="field" style="margin-top: 10px">
+          <label
+            >reference material (optional)<input class="input" [(ngModel)]="draft.reference"
+          /></label>
+        </div>
+        <div class="field" style="margin-top: 10px">
+          <label
+            >extra judge context (optional)<input class="input" [(ngModel)]="draft.judgeContext"
+          /></label>
+        </div>
+      }
+      <div class="row" style="margin-top: 12px">
+        <button
+          class="btn primary"
+          (click)="save()"
+          [disabled]="saving() || !draft.code?.trim() || !draft.name?.trim()"
+        >
+          {{ saving() ? 'Saving…' : editingId() ? 'Save changes' : 'Add objective' }}
+        </button>
+        <button class="btn ghost" (click)="resetDraft()" [disabled]="saving()">Cancel</button>
+      </div>
+    </div>
+  }
+  <div class="library-toolbar">
+    <input
+      class="input search"
+      aria-label="Search objectives"
+      [ngModel]="search()"
+      (ngModelChange)="search.set($event)"
+      placeholder="Search by code, name, objective or criteria…"
+    />
+    <div class="segments" aria-label="Objective type">
+      @for (f of typeFilters; track f.value) {
+        <button
+          class="btn"
+          [class.active]="typeFilter() === f.value"
+          [attr.aria-pressed]="typeFilter() === f.value"
+          (click)="typeFilter.set(f.value)"
+        >
+          {{ f.label }}
+        </button>
+      }
+    </div>
+    @if (search() || typeFilter() !== 'all') {
+      <button class="clear" (click)="clearFilters()">Clear filters</button>
+    }
+  </div>
+  @if (error()) {
+    <div class="banner" role="alert">
+      {{ error() }} <button class="btn" (click)="load()">Retry</button>
+    </div>
+  }
+  @if (loading()) {
+    <div class="empty" role="status">Loading objectives…</div>
+  } @else {
+    <div class="library-workspace">
+      <section class="catalog" aria-label="Objective list">
+        <div class="catalog-heading">
+          <span class="label-mono">Objectives</span
+          ><span>{{ filtered().length }} of {{ detail()?.scenarios?.length ?? 0 }}</span>
+        </div>
+        @for (s of filtered(); track s.id) {
+          <button
+            class="catalog-item"
+            [class.selected]="selected()?.id === s.id"
+            [attr.aria-pressed]="selected()?.id === s.id"
+            (click)="selectedId.set(s.id)"
+          >
+            <div class="row spread">
+              <span class="scenario-code">{{ s.code }}</span
+              ><span class="origin">{{ s.type === 'ipi' ? 'IPI' : 'Direct' }}</span>
+            </div>
+            <strong>{{ s.name }}</strong>
+            <p class="excerpt">{{ s.objective || s.benignTask || 'No objective added.' }}</p>
+            <div class="row tags">
+              @if (s.area) {
+                <span>{{ s.area }}</span>
+              }
+              <span>{{ s.surfaces?.length ?? 0 }} {{ s.surfaces?.length === 1 ? 'surface' : 'surfaces' }}</span>
+              @if (s.breaksTotal) {
+                <span>{{ s.breaksDone }}/{{ s.breaksTotal }} breaks</span>
+              }
+            </div>
+          </button>
+        } @empty {
+          <div class="empty">
+            <h3>
+              {{ detail()?.scenarios?.length ? 'No matching objectives' : 'No objectives yet' }}
+            </h3>
+            <p>
+              {{
+                detail()?.scenarios?.length
+                  ? 'Try another search or clear the filters.'
+                  : 'Add an objective or import Arena page source.'
+              }}
+            </p>
+          </div>
+        }
+      </section>
+      <article class="detail-panel" aria-label="Objective details">
+        @if (selected(); as s) {
+          <header class="detail-head">
+            <div class="row">
+              <span class="scenario-code">{{ s.code }}</span
+              ><span class="chip">{{ s.type }}</span>
+              @if (s.area) {
+                <span class="chip">{{ s.area }}</span>
+              }
+            </div>
+            <h2>{{ s.name }}</h2>
+            <div class="row">
+              <span class="dim"
+                >{{ s.surfaces?.length ?? 0 }} {{ s.surfaces?.length === 1 ? 'surface' : 'surfaces' }} · {{ s.markers?.length ?? 0 }} {{ s.markers?.length === 1 ? 'marker' : 'markers' }}</span
+              ><span class="grow"></span
+              ><button class="btn" (click)="edit(s)">Edit objective</button
+              ><button class="btn danger" (click)="del(s)">Delete</button>
+            </div>
+          </header>
+          <div class="detail-sections">
+            <div>
+              <span class="label-mono">objective</span>
+              <p class="dim" style="margin: 3px 0 0; white-space: pre-wrap">
+                {{ s.objective || '—' }}
+              </p>
+            </div>
+            @if (s.harmfulTask) {
+              <div>
+                <span class="label-mono" style="color: #f3a0a0">harmful task</span>
+                <p class="dim" style="margin: 3px 0 0; white-space: pre-wrap">
+                  {{ s.harmfulTask }}
+                </p>
+              </div>
+            }
+            @if (s.benignTask) {
+              <div>
+                <span class="label-mono"
+                  >benign task — what the operator actually asks the agent</span
+                >
+                <p class="dim" style="margin: 3px 0 0; white-space: pre-wrap">{{ s.benignTask }}</p>
+              </div>
+            }
+            @if (s.criteria) {
+              <div>
+                <span class="label-mono" style="color: #34d399">success criteria</span>
+                <p
+                  style="margin: 3px 0 0; font-size: 12.5px; color: #34d399; white-space: pre-wrap"
+                >
+                  ✓ {{ s.criteria }}
+                </p>
+              </div>
+            }
+            @if (s.type === 'ipi' && s.requiredSurface) {
+              <div>
+                <span class="label-mono">required surface</span>
+                <p class="mono dim" style="margin: 3px 0 0; font-size: 12px">
+                  {{ s.requiredSurface }}
+                </p>
+              </div>
+            }
+            @if (s.surfaces?.length) {
+              <div>
+                <span class="label-mono">injection surfaces (★ = guaranteed)</span>
+                @for (f of s.surfaces; track f.key) {
+                  <p class="mono dim" style="margin: 3px 0 0; font-size: 12px">
+                    {{ f.required ? '★ ' : '• ' }}{{ f.key }} — {{ f.service }}.{{ f.action }} [{{
+                      f.fieldsCsv
+                    }}]
+                  </p>
+                }
+              </div>
+            }
+            @if (s.markers?.length) {
+              <div>
+                <span class="label-mono">markers (embed literally)</span>
+                <p class="mono dim" style="margin: 3px 0 0; font-size: 12px">{{ markerStr(s) }}</p>
+              </div>
+            }
+            @if (s.reference) {
+              <div>
+                <span class="label-mono">reference material</span>
+                <p class="dim" style="margin: 3px 0 0; font-size: 12.5px; white-space: pre-wrap">
+                  {{ s.reference }}
+                </p>
+              </div>
+            }
+            @if (s.judgeContext) {
+              <div>
+                <span class="label-mono">extra judge context</span>
+                <p class="dim" style="margin: 3px 0 0; font-size: 12.5px; white-space: pre-wrap">
+                  {{ s.judgeContext }}
+                </p>
+              </div>
+            }
+            @if (s.knownWall) {
+              <div>
+                <span class="label-mono" style="color: #f3a0a0">known wall</span>
+                <p
+                  style="margin: 3px 0 0; font-size: 12.5px; color: #f3a0a0; white-space: pre-wrap"
+                >
+                  {{ s.knownWall }}
+                </p>
+              </div>
+            }
+            @if (s.behaviorId) {
+              <span class="mono muted" style="font-size: 11px">id: {{ s.behaviorId }}</span>
+            }
+          </div>
+        } @else {
+          <div class="empty">
+            <span class="label-mono">Objective details</span>
+            <h3>Select an objective to inspect it</h3>
+            <p>Criteria, surfaces and markers appear here.</p>
+          </div>
+        }
+      </article>
+    </div>
+  }
+</section>
