@@ -1,14 +1,16 @@
 import { Routes } from '@angular/router';
-import { AssistantPage } from './pages/assistant';
+import { OrganizerPage } from './pages/organizer';
 import { PromptsPage } from './pages/prompts';
+import { SourcesPage } from './pages/sources';
 import { TechniquesPage } from './pages/techniques';
 import { ChallengesPage } from './pages/challenges';
-import { WorkbenchPage } from './pages/agent';
+import { WorkbenchPage } from './pages/workbench';
 import { SettingsPage } from './pages/settings';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'workbench' },
-  { path: 'assistant', component: AssistantPage },
+  { path: 'organizer', component: OrganizerPage },
+  { path: 'sources', component: SourcesPage },
   { path: 'prompts', component: PromptsPage },
   { path: 'techniques', component: TechniquesPage },
   { path: 'challenges', component: ChallengesPage },

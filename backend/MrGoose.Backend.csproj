@@ -25,6 +25,8 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
     <!-- DPAPI: encrypt OpenRouter keys at rest (Windows CurrentUser). -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <!-- Pure-managed PDF text extraction for the Source Library (research documents). -->
+    <PackageReference Include="PdfPig" Version="0.1.9" />
   </ItemGroup>
 
 </Project>

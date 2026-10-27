@@ -49,7 +49,7 @@ public static class TechniqueDefaults
 
     /// <summary>Re-seed the lean built-in set by slug (upsert), prune stale built-ins + stale tags, keep
     /// user-added techniques/tags. Returns the number of built-ins written.</summary>
-    public static int EnsureBuiltins(MrGooseDb db)
+    public static int EnsureBuiltins(MrGooseDb db, bool overwrite = true)
     {
         // tags: ensure the 3, remove stale ones from earlier seeds
         foreach (var (key, color, desc) in Tags)
@@ -64,7 +64,7 @@ public static class TechniqueDefaults
         {
             var e = db.Techniques.FirstOrDefault(t => t.Slug == def.Slug);
             if (e is null) { db.Techniques.Add(def); n++; }
-            else { e.Title = def.Title; e.Summary = def.Summary; e.WhenItWorks = def.WhenItWorks; e.Example = def.Example; e.Tags = def.Tags; e.Builtin = true; n++; }
+            else if (overwrite) { e.Title = def.Title; e.Summary = def.Summary; e.WhenItWorks = def.WhenItWorks; e.Example = def.Example; e.Tags = def.Tags; e.Builtin = true; n++; }
         }
         // prune built-ins that are no longer part of the lean set (old 19-technique seed)
         foreach (var old in db.Techniques.Where(t => t.Builtin).ToList())

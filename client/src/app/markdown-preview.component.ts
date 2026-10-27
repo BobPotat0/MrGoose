@@ -1,14 +1,14 @@
 import { Component, Input, OnChanges, ViewEncapsulation } from '@angular/core';
-import { Marked } from 'marked';
+import { Marked, type Tokens } from 'marked';
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const parser = new Marked({
   gfm: true,
   renderer: {
     // Research/payload files may contain HTML. Display it literally, never execute it.
-    html({ text }) { return escapeHtml(text); },
-    image({ text }) { return `<span>${escapeHtml(text || 'Image')}</span>`; },
-    link({ href, tokens }) {
+    html({ text }: Tokens.HTML | Tokens.Tag) { return escapeHtml(text); },
+    image({ text }: Tokens.Image) { return `<span>${escapeHtml(text || 'Image')}</span>`; },
+    link(this: { parser: { parseInline(tokens: Tokens.Link['tokens']): string } }, { href, tokens }: Tokens.Link) {
       const label = this.parser.parseInline(tokens);
       try {
         const url = new URL(href);

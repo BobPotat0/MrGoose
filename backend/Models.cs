@@ -163,7 +163,7 @@ public class DossierInjection
     public DateTimeOffset Date { get; set; } = DateTimeOffset.UtcNow;
 }
 
-/// <summary>A reusable payload building block for the crafter picker (scaffold / escape / closer…).</summary>
+/// <summary>A reusable payload building block for the attacker picker (scaffold / escape / closer…).</summary>
 public class BuildingBlock
 {
     public int Id { get; set; }
@@ -276,7 +276,31 @@ public class OpenRouterKey
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
-/// <summary>An operator-maintained fact/note appended to the Mr Goose Agent's system prompt (its
+/// <summary>A saved research source: an external link with a description, shown in the Source Library.</summary>
+public class SourceLink
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = "";
+    public string Url { get; set; } = "";
+    public string Description { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A saved research document (PDF / text). Data holds the raw file for viewing; Text holds the
+/// extracted plain text the organizer agent reads (e.g. to extract techniques from a PDF).</summary>
+public class SourceDoc
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";        // pdf | txt | md | json | csv
+    public string Description { get; set; } = "";
+    public byte[] Data { get; set; } = Array.Empty<byte>();
+    public string Text { get; set; } = "";
+    public long Size { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>An operator-maintained fact/note appended to the Mr Goose Organizer's system prompt (its
 /// knowledge base). The agent can also read/write these via its knowledge tools.</summary>
 public class KnowledgeNote
 {

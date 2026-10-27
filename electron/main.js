@@ -38,8 +38,12 @@ let arena = null;
 let control = null;
 let tray = null;
 let arenaWindow = null;
+let sourceWindow = null; // standalone browser window for Source-library links (separate from the arena)
 let cockpitServer = null;
 let cockpitOpening = null;
+// The arena browser is embedded in the cockpit by default; it can be detached into its own window.
+let arenaDocked = true;
+let dockedBounds = { x: 0, y: 0, width: 0, height: 0 };
 
 // ───────────────────────── backend sidecar ─────────────────────────
 function backendExePath() {
@@ -67,23 +71,28 @@ async function waitForHealth(timeoutMs = 30000) {
 // All page callers share the same explicit-tab service. Only the cockpit may invoke IPC.
 function registerBridge() {
   const { ArenaBrowserService } = require('./arena-browser-service');
-  arena = new ArenaBrowserService({ WebContentsView, getWindow: () => arenaWindow?.window,
+  arena = new ArenaBrowserService({ WebContentsView, getWindow: () => (arenaDocked ? mainWindow : arenaWindow?.window),
     changed: value => { arenaWindow?.update(value); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mrgoose:tabs:changed', value); } });
   const { createArenaWindow } = require('./arena-window');
-  arenaWindow = createArenaWindow({ BrowserWindow, ipcMain, browser: arena, isQuitting: () => quitting, openCockpit: showCockpit });
+  arenaWindow = createArenaWindow({ BrowserWindow, ipcMain, browser: arena, isQuitting: () => quitting, openCockpit: showCockpit, dock: dockArena });
   const handle = (name, action) => ipcMain.handle(name, (event, args = {}) => {
     if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('UNAUTHORIZED_IPC');
     return action(args);
   });
-  handle('mrgoose:tabs:create', async ({ url }) => { const id = await arena.create(url); arenaWindow.show(id); return id; });
-  handle('mrgoose:tabs:select', ({ tabId }) => { arenaWindow.show(tabId); return arena.list(); });
-  handle('mrgoose:tabs:show', () => arenaWindow.show());
+  handle('mrgoose:tabs:create', async ({ url }) => { const id = await arena.create(url); await presentArena(id); return id; });
+  handle('mrgoose:tabs:select', ({ tabId }) => { arena.select(tabId); if (!arenaDocked) arenaWindow.show(tabId); return arena.list(); });
+  handle('mrgoose:tabs:show', () => presentArena());
   handle('mrgoose:tabs:close', ({ tabId }) => arena.close(tabId));
   handle('mrgoose:tabs:list', () => arena.list());
   handle('mrgoose:tabs:loadUrl', ({ tabId, url }) => arena.loadUrl(tabId, url));
-  // Older cockpit panes cannot move or hide the separate Arena window.
-  handle('mrgoose:tabs:setBounds', () => true);
-  handle('mrgoose:tabs:setVisible', () => true);
+  // Docked: the cockpit pane positions and shows the embedded view. Detached: the Arena window owns bounds.
+  handle('mrgoose:tabs:setBounds', (rect) => { dockedBounds = rect; if (arenaDocked) arena.setBounds(rect); return true; });
+  handle('mrgoose:tabs:setVisible', ({ visible }) => { if (arenaDocked) arena.setVisible(visible); return true; });
+  handle('mrgoose:arena:detach', () => detachArena());
+  handle('mrgoose:arena:dock', () => dockArena());
+  handle('mrgoose:arena:state', () => ({ docked: arenaDocked }));
+  // Source-library links open in their OWN standalone browser window, never embedded and never the arena.
+  handle('mrgoose:open-url', ({ url }) => openSourceUrl(url));
   for (const [channel, operation] of Object.entries({ fillField: 'fill', readDom: 'read', snapshotConversation: 'snapshot', highlightSendButton: 'highlight', pickElement: 'pick' })) {
     handle('mrgoose:' + channel, async ({ tabId, selector, value }) => {
       try {
@@ -101,8 +110,8 @@ async function startControl() {
   const { LocalControl } = require('./local-control');
   const candidate = new LocalControl({ directory: path.join(PROJECT_ROOT, 'data', 'mcp'), browser: arena,
     runtimePath: process.execPath, adapterPath: path.join(PROJECT_ROOT, 'mcp', 'server.cjs'),
-    hide: () => arenaWindow.hide(),
-    present: async tabId => arenaWindow.show(tabId),
+    hide: hideArena,
+    present: presentArena,
     data: async (operation, args) => {
       const response = await fetch(BACKEND_URL + '/api/control/' + operation, { method: 'POST',
         headers: { Authorization: 'Bearer ' + backendToken, 'Content-Type': 'application/json' }, body: JSON.stringify(args), signal: AbortSignal.timeout(10000) });
@@ -151,6 +160,70 @@ async function showCockpit() {
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show(); mainWindow.focus();
+}
+
+// ───────────────────────── arena docking ─────────────────────────
+// Bring the arena forward on whichever surface currently hosts it.
+async function presentArena(tabId) {
+  if (tabId) arena.select(tabId);
+  if (arenaDocked) { arena.setVisible(true); await showCockpit(); }
+  else { if (!arenaWindow.window) await arenaWindow.create(); arenaWindow.show(tabId); }
+}
+function hideArena() { if (arenaDocked) arena.setVisible(false); else arenaWindow.hide(); }
+
+async function detachArena() {
+  if (!arenaDocked) { arenaWindow.show(); return { docked: false }; }
+  if (!arenaWindow.window) await arenaWindow.create();
+  arena.reparent(mainWindow, arenaWindow.window);
+  arenaDocked = false;
+  arenaWindow.show();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mrgoose:arena:docked', { docked: false });
+  return { docked: false };
+}
+async function dockArena() {
+  if (arenaDocked) return { docked: true };
+  arena.reparent(arenaWindow?.window, mainWindow);
+  arenaDocked = true;
+  arenaWindow?.hide();
+  if (Number.isFinite(dockedBounds.width)) arena.setBounds(dockedBounds);
+  arena.setVisible(true);
+  await showCockpit();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mrgoose:arena:docked', { docked: true });
+  return { docked: true };
+}
+
+// ───────────────────────── source links ─────────────────────────
+// Open a Source-library link in a real, standalone browser window. This is a genuine top-level
+// browser (own persisted session, free navigation) — not an iframe and not the arena view, so it
+// handles sites that block framing and never collides with the embedded Gray Swan arena. One window
+// is reused: a second "view" loads the new URL and brings it forward.
+function openSourceUrl(url) {
+  let raw = String(url || '').trim();
+  if (!raw) return false;
+  if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw; // bare domains (e.g. "google.de") need a scheme
+  let target;
+  try { target = new URL(raw); } catch { return false; }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') return false;
+  url = raw;
+  if (!sourceWindow || sourceWindow.isDestroyed()) {
+    sourceWindow = new BrowserWindow({
+      width: 1200, height: 860, show: false, backgroundColor: '#0a0a0b',
+      title: 'Mr Goose — Source', autoHideMenuBar: true,
+      icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+      webPreferences: { partition: 'persist:sources', contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
+    // It's a browser: let popups/target=_blank navigate in the same window instead of spawning windows.
+    sourceWindow.webContents.setWindowOpenHandler(({ url: next }) => {
+      try { const u = new URL(next); if (u.protocol === 'http:' || u.protocol === 'https:') sourceWindow.loadURL(next); } catch { /* ignore */ }
+      return { action: 'deny' };
+    });
+    sourceWindow.webContents.on('page-title-updated', (_e, title) => { if (sourceWindow && !sourceWindow.isDestroyed()) sourceWindow.setTitle(title ? `${title} — Source` : 'Mr Goose — Source'); });
+    sourceWindow.on('closed', () => { sourceWindow = null; });
+  }
+  void sourceWindow.loadURL(url);
+  sourceWindow.show();
+  sourceWindow.focus();
+  return true;
 }
 
 app.whenReady().then(async () => {

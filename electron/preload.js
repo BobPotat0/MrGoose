@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('mrgoose', {
     saveProfile: (profile) => ipcRenderer.invoke('mrgoose:mcp:profile', profile),
   },
 
+  // Open a Source-library link in its own standalone browser window (never embedded, never the arena).
+  openUrl: (url) => ipcRenderer.invoke('mrgoose:open-url', { url }),
+
   // embedded arena tabs (native WebContentsView, managed in main)
   tabs: {
     create: (url) => ipcRenderer.invoke('mrgoose:tabs:create', { url }),
@@ -24,6 +27,10 @@ contextBridge.exposeInMainWorld('mrgoose', {
     loadUrl: (tabId, url) => ipcRenderer.invoke('mrgoose:tabs:loadUrl', { tabId, url }),
     setBounds: (rect) => ipcRenderer.invoke('mrgoose:tabs:setBounds', rect),
     setVisible: (visible) => ipcRenderer.invoke('mrgoose:tabs:setVisible', { visible }),
+    detach: () => ipcRenderer.invoke('mrgoose:arena:detach'),
+    dock: () => ipcRenderer.invoke('mrgoose:arena:dock'),
+    state: () => ipcRenderer.invoke('mrgoose:arena:state'),
+    onDocked: (callback) => { const listener = (_event, s) => callback(s); ipcRenderer.on('mrgoose:arena:docked', listener); return () => ipcRenderer.removeListener('mrgoose:arena:docked', listener); },
   },
 
   // Explicit tab targeting. No default to the active tab in the main process.

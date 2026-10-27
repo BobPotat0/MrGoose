@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
-import type { TechniqueDto, AgentFileInfo } from './models';
+import type { TechniqueDto, OrganizerFileInfo } from './models';
 import './models'; // pulls in the global window.mrgoose declaration
 
 type Health = 'checking' | 'ok' | 'down';
@@ -22,6 +22,11 @@ export class BackendService {
   private connection?: signalR.HubConnection;
   private started = false;
   private pageActionHandler?: (a: { id: string; name: string; args: string }) => void;
+  // Persistent inspector push: the in-app agent and MCP both emit organizerOpen/organizerChanged.
+  private openHandlers: Array<(i: { kind: string; id: string }) => void> = [];
+  private changeHandlers: Array<(i: { kind: string; id: string }) => void> = [];
+  onOrganizerOpen(cb: (i: { kind: string; id: string }) => void) { this.openHandlers.push(cb); return () => { this.openHandlers = this.openHandlers.filter(h => h !== cb); }; }
+  onOrganizerChanged(cb: (i: { kind: string; id: string }) => void) { this.changeHandlers.push(cb); return () => { this.changeHandlers = this.changeHandlers.filter(h => h !== cb); }; }
 
   async init(): Promise<void> {
     if (this.started) return;
@@ -46,13 +51,15 @@ export class BackendService {
   private async connectHub(): Promise<void> {
     this.hub.set('connecting');
     this.connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${this.backendUrl}/hub/agent`, { accessTokenFactory: () => window.mrgoose?.backendToken || '' })
+      .withUrl(`${this.backendUrl}/hub/cockpit`, { accessTokenFactory: () => window.mrgoose?.backendToken || '' })
       .withAutomaticReconnect()
       .build();
 
-    this.connection.on('agentPageAction', (a: { id: string; name: string; args: string }) => this.pageActionHandler?.(a));
+    this.connection.on('organizerPageAction', (a: { id: string; name: string; args: string }) => this.pageActionHandler?.(a));
     this.connection.on('welcome', (p: { utc: string }) => this.lastEvent.set(`welcome · ${this.time(p.utc)}`));
     this.connection.on('pong', (p: { echo: string; utc: string }) => this.lastEvent.set(`pong "${p.echo}" · ${this.time(p.utc)}`));
+    this.connection.on('organizerOpen', (i: { kind: string; id: string }) => this.openHandlers.forEach(h => h(i)));
+    this.connection.on('organizerChanged', (i: { kind: string; id: string }) => this.changeHandlers.forEach(h => h(i)));
     this.connection.onreconnecting(() => this.hub.set('connecting'));
     this.connection.onreconnected(() => this.hub.set('connected'));
     this.connection.onclose(() => this.hub.set('disconnected'));
@@ -66,8 +73,8 @@ export class BackendService {
     }
   }
 
-  /** Run the crafter tool-loop. Tokens → onToken; tool activity → onTool; completion → onDone(ok). */
-  async sendChat(
+  /** Run the attacker tool-loop. Tokens → onToken; tool activity → onTool; completion → onDone(ok). */
+  async attackerSend(
     req: { scenarioCode: string; modelName: string; systemPrompt: string; messages: ChatMsg[] },
     onToken: (t: string) => void,
     onTool: (name: string, args: string) => void,
@@ -79,58 +86,58 @@ export class BackendService {
     const onReas = (t: string) => onReasoning?.(t);
     const onToolEv = (p: { name: string; args: string }) => onTool(p.name, p.args);
     const onFin = (r: { ok: boolean }) => {
-      this.connection!.off('chatToken', onTok);
-      this.connection!.off('chatReasoning', onReas);
-      this.connection!.off('chatTool', onToolEv);
-      this.connection!.off('chatDone', onFin);
+      this.connection!.off('attackerToken', onTok);
+      this.connection!.off('attackerReasoning', onReas);
+      this.connection!.off('attackerTool', onToolEv);
+      this.connection!.off('attackerDone', onFin);
       onDone(!!r?.ok);
     };
-    this.connection.on('chatToken', onTok);
-    this.connection.on('chatReasoning', onReas);
-    this.connection.on('chatTool', onToolEv);
-    this.connection.on('chatDone', onFin);
+    this.connection.on('attackerToken', onTok);
+    this.connection.on('attackerReasoning', onReas);
+    this.connection.on('attackerTool', onToolEv);
+    this.connection.on('attackerDone', onFin);
     try {
-      await this.connection.invoke('ChatSend', req);
+      await this.connection.invoke('AttackerSend', req);
     } catch {
       onFin({ ok: false });
     }
   }
 
-  /** Mr Goose Agent: tool-using loop over the whole app. Tokens → onToken, reasoning → onReasoning, tools → onTool. */
-  async agentChat(messages: ChatMsg[], onToken: (t: string) => void, onTool: (name: string, args: string) => void, onDone: (ok: boolean) => void, onReasoning?: (t: string) => void, onTechniques?: (rows: TechniqueDto[]) => void, onFile?: (file: AgentFileInfo) => void, sessionId?: string): Promise<void> {
+  /** Mr Goose Organizer: tool-using loop over the whole app. Tokens → onToken, reasoning → onReasoning, tools → onTool. */
+  async organizerChat(messages: ChatMsg[], onToken: (t: string) => void, onTool: (name: string, args: string) => void, onDone: (ok: boolean) => void, onReasoning?: (t: string) => void, onTechniques?: (rows: TechniqueDto[]) => void, onFile?: (file: OrganizerFileInfo) => void, sessionId?: string): Promise<void> {
     if (!this.connection || this.hub() !== 'connected') { onDone(false); return; }
     const onTok = (t: string) => onToken(t);
     const onReas = (t: string) => onReasoning?.(t);
     const onToolEv = (p: { name: string; args: string }) => onTool(p.name, p.args);
     const onTable = (rows: TechniqueDto[]) => onTechniques?.(rows);
-    const onFileEvent = (file: AgentFileInfo) => onFile?.(file);
+    const onFileEvent = (file: OrganizerFileInfo) => onFile?.(file);
     let finished = false;
     const onFin = (r: { ok: boolean }) => {
       if (finished) return;
       finished = true;
-      this.connection!.off('agentFile', onFileEvent);
-      this.connection!.off('agentTechniques', onTable);
-      this.connection!.off('agentToken', onTok);
-      this.connection!.off('agentReasoning', onReas);
-      this.connection!.off('agentTool', onToolEv);
-      this.connection!.off('agentDone', onFin);
+      this.connection!.off('organizerFile', onFileEvent);
+      this.connection!.off('organizerTechniques', onTable);
+      this.connection!.off('organizerToken', onTok);
+      this.connection!.off('organizerReasoning', onReas);
+      this.connection!.off('organizerTool', onToolEv);
+      this.connection!.off('organizerDone', onFin);
       onDone(!!r?.ok);
     };
-    this.connection.on('agentFile', onFileEvent);
-    this.connection.on('agentTechniques', onTable);
-    this.connection.on('agentToken', onTok);
-    this.connection.on('agentReasoning', onReas);
-    this.connection.on('agentTool', onToolEv);
-    this.connection.on('agentDone', onFin);
-    try { await this.connection.invoke('AgentChat', messages, sessionId ?? null); } catch { onFin({ ok: false }); }
+    this.connection.on('organizerFile', onFileEvent);
+    this.connection.on('organizerTechniques', onTable);
+    this.connection.on('organizerToken', onTok);
+    this.connection.on('organizerReasoning', onReas);
+    this.connection.on('organizerTool', onToolEv);
+    this.connection.on('organizerDone', onFin);
+    try { await this.connection.invoke('OrganizerChat', messages, sessionId ?? null); } catch { onFin({ ok: false }); }
   }
 
   /** Register a handler for agent page actions (the agent asks the client to fill/read the arena). */
-  onAgentPageAction(handler: (a: { id: string; name: string; args: string }) => void): void {
+  onOrganizerPageAction(handler: (a: { id: string; name: string; args: string }) => void): void {
     this.pageActionHandler = handler;
   }
-  agentPageResult(id: string, result: string): void {
-    this.connection?.invoke('AgentPageResult', id, result).catch(() => {});
+  organizerPageResult(id: string, result: string): void {
+    this.connection?.invoke('OrganizerPageResult', id, result).catch(() => {});
   }
 
   /** Stream the next direct-jailbreak instructor prompt for a Finder hunt. */

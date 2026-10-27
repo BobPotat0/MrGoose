@@ -11,4 +11,5 @@ Each scenario card shows the **full description**: harmful/benign task, objectiv
 reference, judge context, known wall, break counts and ids. The operator can create/edit/delete challenges and
 scenarios here.
 
-**Your tools (agent):** list_challenges, get_challenge, create_scenario, list_models.
+**Your tools (agent):** list_challenges, get_challenge, create_challenge, update_challenge, delete_challenge,
+create_scenario, update_scenario, delete_scenario, set_markers (a scenario's injection markers), list_models.

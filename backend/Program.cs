@@ -8,7 +8,7 @@ using MrGoose.Backend.Hubs;
 using MrGoose.Backend.Services;
 
 // Mr Goose backend — local sidecar for the Electron cockpit.
-// REST (/api/*) + SignalR (/hub/agent) + SQLite store. Electron spawns and kills this process.
+// REST (/api/*) + SignalR (/hub/cockpit) + SQLite store. Electron spawns and kills this process.
 
 const string DefaultUrl = "http://127.0.0.1:5174";
 
@@ -27,10 +27,10 @@ builder.Services.AddDbContext<MrGooseDb>(o => o.UseSqlite($"Data Source={dbPath}
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<OpenRouterClient>();
 builder.Services.AddScoped<ImportService>();
-builder.Services.AddScoped<CraftService>();
+builder.Services.AddScoped<AttackerService>();
 builder.Services.AddScoped<FinderService>();
-builder.Services.AddScoped<AgentService>();
-builder.Services.AddScoped<AgentFileService>();
+builder.Services.AddScoped<OrganizerService>();
+builder.Services.AddScoped<OrganizerFileService>();
 builder.Services.AddScoped<LibraryQueryService>();
 builder.Services.AddSignalR();
 
@@ -53,13 +53,16 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<MrGooseDb>();
     db.Database.EnsureCreated();
-    db.Database.ExecuteSqlRaw(AgentFileService.SchemaSql);
+    // rename the legacy AgentFiles table to OrganizerFiles on existing DBs (role rename), before create-if-missing
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE AgentFiles RENAME TO OrganizerFiles"); } catch { /* fresh DB or already renamed */ }
+    db.Database.ExecuteSqlRaw(OrganizerFileService.SchemaSql);
+    db.Database.ExecuteSqlRaw(SourceEndpoints.SchemaSql);
     ControlEndpoints.EnsureSchema(db);
     // lightweight column add for existing DBs (EnsureCreated won't migrate) — keeps the operator's data
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN WaveBreaksJson TEXT NOT NULL DEFAULT '{}'"); } catch { /* column already exists */ }
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN Wave TEXT NOT NULL DEFAULT ''"); } catch { /* column already exists */ }
     Seeder.Run(db);
-    TechniqueDefaults.EnsureBuiltins(db);   // idempotent: built-in catalog + tag registry even on an existing DB
+    TechniqueDefaults.EnsureBuiltins(db, overwrite: false);   // ensure built-ins + tags exist, but preserve operator edits (reset restores defaults)
 }
 
 app.UseCors(CorsPolicy);
@@ -72,7 +75,7 @@ app.Use(async (context, next) =>
     if (origin.Length > 0 && origin != rendererOrigin) { context.Response.StatusCode = 403; return; }
     var supplied = context.Request.Headers.Authorization.ToString();
     if (supplied.StartsWith("Bearer ", StringComparison.Ordinal)) supplied = supplied[7..];
-    else supplied = context.Request.Path.StartsWithSegments("/hub/agent") ? context.Request.Query["access_token"].ToString() : "";
+    else supplied = context.Request.Path.StartsWithSegments("/hub/cockpit") ? context.Request.Query["access_token"].ToString() : "";
     if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(supplied), Encoding.UTF8.GetBytes(controlToken)))
     { context.Response.StatusCode = 401; return; }
     await next();
@@ -82,7 +85,8 @@ var version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0";
 app.MapGet("/health", () => Results.Json(new { status = "ok", app = "Mr Goose Backend", version, instanceId, utc = DateTimeOffset.UtcNow }));
 
 app.MapApi();
+app.MapSources();
 app.MapControl();
-app.MapHub<AgentHub>("/hub/agent");
+app.MapHub<CockpitHub>("/hub/cockpit");
 
 app.Run();

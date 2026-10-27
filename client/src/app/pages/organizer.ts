@@ -1,21 +1,23 @@
-import { Component, ElementRef, ViewChild, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BackendService } from '../backend.service';
 import { ArenaService } from '../arena.service';
 import { ApiService } from '../api.service';
 import { ToastService } from '../toast.service';
-import { AgentChatStore } from '../agent-chat.store';
-import { AgentFilesComponent } from '../agent-files.component';
-import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
+import { OrganizerChatStore } from '../organizer-chat.store';
+import { OrganizerFilesComponent } from '../organizer-files.component';
+import { InspectorComponent } from '../inspector.component';
+import { InspectorStore } from '../inspector.store';
+import { KnowledgeNote, OrganizerDoc, OrganizerFileInfo } from '../models';
 
 @Component({
   selector: 'mg-assistant',
-  imports: [FormsModule, AgentFilesComponent],
+  imports: [FormsModule, OrganizerFilesComponent, InspectorComponent],
   template: `
     <section class="page agent-page">
       <header class="page-head agent-head">
         <div class="agent-heading">
-          <span class="label-mono">Mr Goose Agent</span>
+          <span class="label-mono">Mr Goose Organizer</span>
           @if (renaming()) {
             <form class="row title-form" (submit)="saveTitle($event)">
               <input class="input" name="sessionTitle" [(ngModel)]="titleDraft" aria-label="Session title" maxlength="80" />
@@ -26,6 +28,10 @@ import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
           }
         </div>
         <div class="row agent-actions">
+          <div class="row" style="gap: 4px; margin-right: 6px" role="tablist" aria-label="Organizer mode">
+            <button class="btn" [class.primary]="orgMode() === 'direct'" (click)="setOrgMode('direct')">Direct</button>
+            <button class="btn" [class.primary]="orgMode() === 'mcp'" (click)="setOrgMode('mcp')">MCP</button>
+          </div>
           <button class="btn" type="button" (click)="showInstructions.set(!showInstructions())" [attr.aria-expanded]="showInstructions()" aria-controls="agent-instructions">Instructions</button>
           <button class="btn" type="button" (click)="showFiles.set(!showFiles())" [attr.aria-expanded]="showFiles()" aria-controls="agent-session-files" [disabled]="chat.uploading()">Files</button>
           <button class="btn ghost" type="button" (click)="deleteChat()" [disabled]="chat.streaming() || chat.uploading() || !chat.sessions().length">Delete chat</button>
@@ -82,9 +88,13 @@ import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
       }
       @if (chat.historyError()) { <p class="history-error" role="status">{{ chat.historyError() }}</p> }
 
-      <div class="agent-layout" [class.with-files]="showFiles()">
+      @if (orgMode() === 'mcp') {
+        <div class="mcp-bar">Organizer runs via MCP — your external model drives it via <span class="mono">organizer_run</span> + <span class="mono">open_in_view</span>. Files &amp; Inspector below are live: drop a file and it reads it with <span class="mono">list_files</span>/<span class="mono">read_file</span>. Launch/Submit stays manual.</div>
+      }
+      <div class="agent-layout" [class.with-files]="showFiles() || orgMode() === 'mcp'" [class.mcp]="orgMode() === 'mcp'">
+      @if (orgMode() === 'direct') {
       <div class="agent-chat-column">
-      <div class="card agent-thread" style="min-height:320px">
+      <div #thread class="card agent-thread">
         @for (v of chat.view(); track $index) {
           @if (v.type==='file' && v.file) {
             <button class="file-card" type="button" (click)="openFile(v.file)"><span class="mono file-card-icon">▤</span><span><strong>{{ v.file.name }}</strong><small>{{ v.file.source === 'upload' ? 'Uploaded by you' : 'Created by Mr Goose' }} · Open preview →</small></span></button>
@@ -99,10 +109,10 @@ import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
                     <thead><tr><th scope="col">Technique</th><th scope="col">Description</th><th scope="col">When it works / example</th></tr></thead>
                     <tbody>
                       @for (t of v.techniques; track t.id) {
-                        <tr><td><strong>{{ t.title }}</strong><div class="muted" style="margin-top:6px">{{ t.tags }} · {{ t.builtin ? 'built-in' : 'custom' }}</div></td>
+                        <tr class="tech-row" (click)="openTechniqueInInspector(t.id)" title="Open in the inspector" style="cursor:pointer"><td><strong>{{ t.title }}</strong><div class="muted" style="margin-top:6px">{{ t.tags }} · {{ t.builtin ? 'built-in' : 'custom' }}</div></td>
                           <td>{{ t.summary || '—' }}</td>
                           <td><p>{{ t.whenItWorks || 'No applicability notes.' }}</p>
-                            @if (t.example) { <details style="margin-top:8px"><summary>Example</summary><pre class="mono">{{ t.example }}</pre></details> }
+                            @if (t.example) { <details style="margin-top:8px" (click)="$event.stopPropagation()"><summary>Example</summary><pre class="mono">{{ t.example }}</pre></details> }
                           </td></tr>
                       }
                     </tbody>
@@ -138,8 +148,14 @@ import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
         <div class="composer-hints"><span>Enter send · Shift+Enter newline</span><span role="status">{{ chat.streaming() ? 'Working…' : 'Fill only · you submit' }}</span></div>
       </div>
       </div>
-      @defer (when showFiles()) {
-        @if (showFiles()) { <mg-agent-files id="agent-session-files" [sessionId]="chat.activeId()" [revision]="chat.filesRevision()" [openFileId]="fileFocus()?.sessionId === chat.activeId() ? fileFocus()?.id || '' : ''" (fileUploaded)="chat.recordFile($event)" (uploadingChange)="uploadState($event)" (fileSelected)="focusFile($event)" /> }
+      }
+      @defer (when showFiles() || orgMode() === 'mcp') {
+        @if (showFiles() || orgMode() === 'mcp') {
+          <div class="agent-side">
+            <mg-agent-files id="agent-session-files" [sessionId]="chat.activeId()" [revision]="chat.filesRevision()" [hidePreview]="true" [openFileId]="fileFocus()?.sessionId === chat.activeId() ? fileFocus()?.id || '' : ''" (fileUploaded)="chat.recordFile($event)" (uploadingChange)="uploadState($event)" (fileSelected)="openInInspector($event)" />
+            <mg-inspector />
+          </div>
+        }
       }
       </div>
     </section>
@@ -154,8 +170,8 @@ import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
     .technique-table pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; margin: 8px 0 0; }
     .technique-table summary { cursor: pointer; color: var(--lime); }
     :host { display: block; height: 100%; }
-    .agent-page { width: 100%; max-width: none; min-width: 0; min-height: 100%; display: flex; flex-direction: column; }
-    .agent-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+    .agent-page { width: 100%; max-width: none; min-width: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+    .agent-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; flex-shrink: 0; }
     .agent-heading { min-width: 0; flex: 1; }
     .title-row { gap: 10px; margin-top: 6px; }
     .title-row h1 { overflow-wrap: anywhere; }
@@ -163,21 +179,26 @@ import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
     .title-form { margin-top: 9px; }
     .title-form .input { flex: 1 1 180px; }
     .agent-actions { padding-top: 3px; }
-    .instructions-panel { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); margin-bottom: 18px; }
+    .instructions-panel { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); margin-bottom: 18px; flex-shrink: 0; max-height: 46%; overflow: auto; }
     .instructions-head { margin: 0 2px 10px; }
     .instructions-panel > .card:last-child { margin-bottom: 0; }
     .history-error { color: var(--amber); font-size: 12px; margin-bottom: 12px; }
-    .agent-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; flex: 1; min-height: 0; }
+    .agent-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; flex: 1; min-height: 0; overflow: hidden; }
     .agent-layout.with-files { grid-template-columns: minmax(0, 1fr) minmax(300px, 34%); }
-    .agent-chat-column { min-width: 0; display: flex; flex-direction: column; }
-    .agent-thread { flex: 1; }
+    .agent-chat-column { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .agent-thread { flex: 1; min-height: 0; overflow-y: auto; }
     .file-card { display: flex; align-items: center; gap: 12px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 12px 14px; margin: 10px 0 16px; text-align: left; cursor: pointer; max-width: 100%; }
     .file-card:hover { border-color: var(--lime); }
     .file-card strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
     .file-card small { display: block; color: var(--text-dim); font-size: 11px; margin-top: 5px; }
     .file-card-icon { color: var(--lime); font-size: 22px; }
     @media (max-width: 1100px) { .agent-layout.with-files { grid-template-columns: minmax(0, 1fr); } .agent-chat-column { min-height: 460px; } }
-    .composer-dock { position: sticky; bottom: 0; padding-top: 9px; padding-bottom: 3px; }
+    .agent-layout.mcp { grid-template-columns: minmax(0, 1fr) !important; }
+    .mcp-bar { flex-shrink: 0; border: 1px solid var(--lime); border-radius: 8px; background: var(--surface); padding: 9px 12px; margin-bottom: 14px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+    .agent-side { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: hidden; }
+    .agent-side mg-agent-files { display: block; flex: 0 1 auto; max-height: 48%; overflow: auto; }
+    .agent-side mg-inspector { display: block; flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .composer-dock { flex-shrink: 0; padding-top: 9px; padding-bottom: 3px; }
     .agent-composer { border: 1px solid var(--border-strong); border-left: 3px solid var(--lime); border-radius: 8px; background: var(--surface-2); padding: 14px 15px 10px; }
     .agent-composer:focus-within { border-color: var(--lime); }
     .agent-composer textarea { display: block; width: 100%; min-height: 56px; max-height: 220px; resize: none; overflow-y: auto; border: 0; outline: none; padding: 0; background: transparent; color: var(--text); font: 13px/1.6 var(--mono); }
@@ -193,32 +214,50 @@ import { KnowledgeNote, AgentDoc, AgentFileInfo } from '../models';
     @media (max-width: 760px) { .agent-page { padding: 20px 16px; } .agent-heading { flex-basis: 100%; } .agent-actions { padding-top: 0; } }
   `],
 })
-export class AssistantPage {
+export class OrganizerPage implements AfterViewInit, OnDestroy {
   backend = inject(BackendService);
   arena = inject(ArenaService);
-  chat = inject(AgentChatStore);
+  chat = inject(OrganizerChatStore);
   private api = inject(ApiService);
   private toast = inject(ToastService);
+  readonly inspector = inject(InspectorStore);
 
   input = '';
   readonly showInstructions = signal(false);
   readonly showFiles = signal(true);
+  // Direct = in-app organizer chat. MCP = an external model drives the organizer; chat is hidden, Files + Inspector stay live.
+  readonly orgMode = signal<'direct' | 'mcp'>((() => { try { return (localStorage.getItem('mg.orgMode') as 'direct' | 'mcp') || 'direct'; } catch { return 'direct'; } })());
+  setOrgMode(m: 'direct' | 'mcp') { this.orgMode.set(m); try { localStorage.setItem('mg.orgMode', m); } catch { /* */ } if (m === 'mcp') void this.api.setOrganizerSession(this.chat.activeId()); }
   readonly fileFocus = signal<{ sessionId: string; id: string } | null>(null);
   readonly renaming = signal(false);
   readonly modelLabel = signal('Configured model');
   titleDraft = '';
   @ViewChild('composer') composer?: ElementRef<HTMLTextAreaElement>;
+  @ViewChild('thread') threadRef?: ElementRef<HTMLElement>;
+  private stick = true;
+  private threadObserver?: MutationObserver;
 
   // system prompt + knowledge base
   readonly showSys = signal(false);
   readonly showKb = signal(false);
   readonly sysCustom = signal(false);
   readonly knowledge = signal<KnowledgeNote[]>([]);
-  readonly docs = signal<AgentDoc[]>([]);
+  readonly docs = signal<OrganizerDoc[]>([]);
   readonly openDoc = signal('');
   sysPrompt = ''; kbTitle = ''; kbContent = '';
 
-  constructor() { this.loadAgentConfig(); }
+  constructor() { this.loadAgentConfig(); if (this.orgMode() === 'mcp') void this.api.setOrganizerSession(this.chat.activeId()); }
+
+  ngAfterViewInit() {
+    const el = this.threadRef?.nativeElement;
+    if (!el) return;
+    // Stick to the bottom as the chat grows; release when the operator scrolls up, re-engage at the bottom.
+    el.addEventListener('scroll', () => { this.stick = el.scrollHeight - el.scrollTop - el.clientHeight < 48; });
+    this.threadObserver = new MutationObserver(() => { if (this.stick) el.scrollTop = el.scrollHeight; });
+    this.threadObserver.observe(el, { childList: true, subtree: true, characterData: true });
+    el.scrollTop = el.scrollHeight;
+  }
+  ngOnDestroy() { this.threadObserver?.disconnect(); }
 
   send() {
     if (this.chat.streaming() || this.chat.uploading() || !this.input.trim()) return;
@@ -237,23 +276,25 @@ export class AssistantPage {
   }
   beginRename() { this.titleDraft = this.chat.currentTitle(); this.renaming.set(true); }
   saveTitle(event: Event) { event.preventDefault(); this.chat.renameChat(this.titleDraft); this.renaming.set(false); }
-  focusFile(file: AgentFileInfo) { this.fileFocus.set({ sessionId: this.chat.activeId(), id: file.id }); }
-  openFile(file: AgentFileInfo) { this.focusFile(file); this.showFiles.set(true); }
+  focusFile(file: OrganizerFileInfo) { this.fileFocus.set({ sessionId: this.chat.activeId(), id: file.id }); }
+  openInInspector(file: OrganizerFileInfo) { this.focusFile(file); void this.inspector.openFile(this.chat.activeId(), file.id); }
+  openTechniqueInInspector(id: number) { this.showFiles.set(true); void this.inspector.openTechnique(id); }
+  openFile(file: OrganizerFileInfo) { this.focusFile(file); this.showFiles.set(true); }
   uploadState(uploading: boolean) { if (uploading) this.chat.beginUpload(); else this.chat.uploading.set(false); }
   async deleteChat() {
     if (this.chat.streaming() || this.chat.uploading() || !confirm('Delete this saved conversation and its files?')) return;
-    try { await this.api.deleteAgentFiles(this.chat.activeId()); this.chat.deleteChat(); }
+    try { await this.api.deleteOrganizerFiles(this.chat.activeId()); this.chat.deleteChat(); }
     catch { this.toast.err('Could not delete session files. The conversation has been kept.'); }
   }
 
   private async loadAgentConfig() {
-    try { const s = await this.api.agentSystem(); this.sysPrompt = s.prompt; this.sysCustom.set(s.isCustom); this.docs.set(await this.api.agentDocs()); this.knowledge.set(await this.api.knowledge()); const settings = await this.api.settings(); this.modelLabel.set(settings.model || 'Choose a model in Settings'); } catch { /* backend down */ }
+    try { const s = await this.api.organizerSystem(); this.sysPrompt = s.prompt; this.sysCustom.set(s.isCustom); this.docs.set(await this.api.organizerDocs()); this.knowledge.set(await this.api.knowledge()); const settings = await this.api.settings(); this.modelLabel.set(settings.model || 'Choose a model in Settings'); } catch { /* backend down */ }
   }
-  async saveSys() { await this.api.setAgentSystem(this.sysPrompt); this.sysCustom.set(true); this.toast.ok('system prompt saved'); }
-  async resetSys() { const r = await this.api.resetAgentSystem(); this.sysPrompt = r.prompt; this.sysCustom.set(false); this.toast.ok('reset to default'); }
+  async saveSys() { await this.api.setOrganizerSystem(this.sysPrompt); this.sysCustom.set(true); this.toast.ok('system prompt saved'); }
+  async resetSys() { const r = await this.api.resetOrganizerSystem(); this.sysPrompt = r.prompt; this.sysCustom.set(false); this.toast.ok('reset to default'); }
   async addKb() { await this.api.addKnowledge({ title: this.kbTitle.trim(), content: this.kbContent.trim() }); this.kbTitle = ''; this.kbContent = ''; this.knowledge.set(await this.api.knowledge()); this.toast.ok('note added'); }
   async delKb(n: KnowledgeNote) { await this.api.deleteKnowledge(n.id); this.knowledge.set(await this.api.knowledge()); }
-  async saveDoc(d: AgentDoc) { await this.api.saveDoc(d.name, d.content); this.docs.set(await this.api.agentDocs()); this.toast.ok('doc saved'); }
-  async resetDoc(d: AgentDoc) { await this.api.resetDoc(d.name); this.docs.set(await this.api.agentDocs()); this.toast.ok('reset to default'); }
-  async resetAllDocs() { await this.api.resetDocs(); this.docs.set(await this.api.agentDocs()); this.toast.ok('all docs reset to default'); }
+  async saveDoc(d: OrganizerDoc) { await this.api.saveDoc(d.name, d.content); this.docs.set(await this.api.organizerDocs()); this.toast.ok('doc saved'); }
+  async resetDoc(d: OrganizerDoc) { await this.api.resetDoc(d.name); this.docs.set(await this.api.organizerDocs()); this.toast.ok('reset to default'); }
+  async resetAllDocs() { await this.api.resetDocs(); this.docs.set(await this.api.organizerDocs()); this.toast.ok('all docs reset to default'); }
 }

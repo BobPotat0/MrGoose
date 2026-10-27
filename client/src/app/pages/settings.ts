@@ -12,16 +12,21 @@ import { KeyInfo, ModelInfo } from '../models';
       <header class="page-head">
         <span class="label-mono">Settings</span>
         <h1>Settings</h1>
-        <p class="sub">OpenRouter powers the crafter/agent/judge only — victim responses always come from the real arena.</p>
+        <p class="sub">OpenRouter powers the attacker/agent/judge only — victim responses always come from the real arena.</p>
       </header>
 
       @if (mcpAvailable) {
         <div class="card">
-          <span class="label-mono">Local MCP</span>
-          <p class="muted">Your external client supplies its model. MrGoose only reads data and fills fields; you verify the Arena model/scenario and launch manually.</p>
-          <p class="muted">Run collection is not installed. Saved observations have unknown run identity and completion.</p>
-          <p class="muted">Local access is automatic for your Windows user. No authorization or pairing step.</p>
-          @if (mcpConfig()) { <details><summary>MCP client configuration</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ mcpConfig() }}</pre></details> }
+          <span class="label-mono">Local MCP — connect an external agent</span>
+          <p class="muted">Let Claude, Codex or another MCP client drive MrGoose: it reads your libraries, returns attack context, and fills Arena fields. It never submits — you verify the model/scenario and launch manually. The desktop app must be running; access is automatic for your Windows user (no pairing step).</p>
+          @if (mcpConfig()) {
+            <div class="row spread" style="margin-top:10px"><span class="label-mono">Config (mcpServers)</span><button class="btn" (click)="copy(mcpConfig(), 'config copied')">copy</button></div>
+            <pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:11.5px;max-height:170px;overflow:auto">{{ mcpConfig() }}</pre>
+          }
+          @if (mcpSetupPrompt()) {
+            <div class="row spread" style="margin-top:12px"><span class="label-mono">Or paste into Claude / ChatGPT</span><button class="btn primary" (click)="copy(mcpSetupPrompt(), 'setup prompt copied')">copy prompt</button></div>
+            <p class="muted" style="font-size:11px;margin-top:4px">A ready-made message that tells the assistant how to add the server.</p>
+          }
           <details style="margin-top:12px"><summary>Operator-approved Arena field profiles</summary>
             <p class="muted">Advanced: save a profile JSON with id, challengeSlug, url, fields (field name to CSS selector), resultSelector. Agents can discover and bind fields directly through MCP. Custom model/scenario controls remain manual.</p>
             <textarea class="textarea" style="min-height:160px" [(ngModel)]="mcpProfile" placeholder="Profile JSON"></textarea>
@@ -81,6 +86,7 @@ export class SettingsPage {
   readonly searching = signal(false);
   readonly mcpAvailable = !!window.mrgoose?.mcp;
   readonly mcpConfig = signal('');
+  readonly mcpSetupPrompt = signal('');
   readonly mcpProfiles = signal('');
   mcpProfile = '';
   model = ''; arenaUrl = '';
@@ -94,7 +100,15 @@ export class SettingsPage {
     this.keys.set(await this.api.keys());
     await this.loadMcp();
   }
-  async loadMcp() { const state = await window.mrgoose?.mcp?.status(); if (state) { this.mcpConfig.set(JSON.stringify({ command: state.command, args: state.args, env: state.env }, null, 2)); this.mcpProfiles.set(JSON.stringify(state.profiles, null, 2)); } }
+  async loadMcp() {
+    const state = await window.mrgoose?.mcp?.status();
+    if (!state) return;
+    const config = JSON.stringify({ mcpServers: { mrgoose: { command: state.command, args: state.args, env: state.env } } }, null, 2);
+    this.mcpConfig.set(config);
+    this.mcpProfiles.set(JSON.stringify(state.profiles, null, 2));
+    this.mcpSetupPrompt.set(`Please register this local MCP server in my MCP configuration so you can use its tools. It is "MrGoose", a local Gray Swan red-team cockpit — it exposes read-only library tools, read_attack_context (the crafting context for a model × scenario), and organizer read/write tools, plus a fill-only Arena flow. It NEVER submits to the Arena; I launch every attempt manually. The MrGoose desktop app must be running.\n\n${config}`);
+  }
+  async copy(text: string, label = 'copied') { try { await navigator.clipboard.writeText(text); this.toast.ok(label); } catch { this.toast.err('copy failed'); } }
   async saveMcpProfile() { try { await window.mrgoose?.mcp?.saveProfile(JSON.parse(this.mcpProfile)); await this.loadMcp(); this.toast.ok('profile saved'); } catch { this.toast.err('Invalid profile or unsupported Arena URL'); } }
 
   async addKey() { if (!this.newKeyValue.trim()) return; await this.api.addKey(this.newKeyName.trim() || 'key', this.newKeyValue.trim()); this.newKeyName = ''; this.newKeyValue = ''; this.keys.set(await this.api.keys()); this.toast.ok('key added (encrypted)'); }

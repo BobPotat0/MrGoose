@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — 2026-10-27 — Organizer/Attacker roles, craft modes, MCP role tools, dockable arena
+- Renamed the assistant role to **Mr Goose Organizer** and the Break Workbench crafter to **Mr Goose Attacker** throughout — labels, system prompts, code symbols, files and wire names: SignalR methods/events are now `organizer*`/`attacker*`, REST routes are `/api/organizer/*`, the hub is `/hub/cockpit`, and the `AgentFiles` table is renamed to `OrganizerFiles` on existing databases at startup.
+- Added a **Direct / MCP** mode toggle to the Attacker craft panel: MCP mode hides the in-app chat and composer and shows a status card, while the Craft context stays visible for an external client to pull (choice persisted per viewer).
+- Added three **MCP role tools** (surface now 19): `read_attack_context` (the crafting context for a model × scenario), `organizer_catalog` (list the organizer's data operations) and `organizer_run` (run one read/write organizer operation on local data; arena page and conversation-file tools are rejected). New broker scopes `organizer.read/write` and `attack.read` are granted to the local client automatically.
+- The Gray Swan browser is **embedded in the cockpit by default** again and can be **detached** into its own window and **docked** back, with new tabs available in both; MCP `arena_open_tab`/`present` target whichever surface currently hosts the arena.
+
 ## Unreleased — 2026-10-26 — Agent technique table and local chat history
 - Markdown files now open in formatted Preview (headings, lists, tables, links and fenced code), with an exact Source toggle. Raw HTML is displayed literally, remote images are not fetched, and downloads remain unchanged. Uses pinned marked 18.1.2 and Angular HTML sanitization.
 - Session Files: persistent agent-created and user-uploaded UTF-8 text artifacts in the existing `mrgoose.db` (`AgentFiles` table), clickable conversation file cards, right-side preview, multi-file Upload / drag-and-drop, CSV table view and exact-content downloads. `create_file`, `list_files`, `read_file` are scoped to the calling conversation; file content is retrieved on demand. Supported formats: .txt/.md/.json/.csv, up to 1 MiB each. Confirmed chat deletion removes its files.

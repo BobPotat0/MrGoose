@@ -1,7 +1,7 @@
 const path = require('node:path');
 
 // Lightweight native host. It owns its bounds; Angular never positions these views.
-function createArenaWindow({ BrowserWindow, ipcMain, browser, isQuitting, openCockpit, directory = __dirname }) {
+function createArenaWindow({ BrowserWindow, ipcMain, browser, isQuitting, openCockpit, dock, directory = __dirname }) {
   let window = null;
   const handles = [];
   const sync = () => {
@@ -47,7 +47,7 @@ function createArenaWindow({ BrowserWindow, ipcMain, browser, isQuitting, openCo
       handle('close', ({ tabId }) => browser.close(tabId));
       handle('create', async () => { const id = await browser.create('https://app.grayswan.ai/arena/challenge/ipi-black-2026'); show(id); return browser.list(); });
       handle('hide', () => window.hide());
-      handle('cockpit', () => openCockpit());
+      handle('cockpit', () => (dock ? dock() : openCockpit()));
       await window.loadFile(path.join(directory, 'arena-window.html'));
       sync(); update(browser.list());
       return window;

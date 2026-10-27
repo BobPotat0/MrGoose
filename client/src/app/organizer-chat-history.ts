@@ -1,7 +1,7 @@
 import type { ChatMsg } from './backend.service';
-import type { TechniqueDto, AgentFileInfo } from './models';
+import type { TechniqueDto, OrganizerFileInfo } from './models';
 
-export type ViewItem = { type: 'user' | 'assistant' | 'tool' | 'techniques' | 'file'; text: string; reasoning?: string; reasoningOpen?: boolean; techniques?: TechniqueDto[]; file?: AgentFileInfo };
+export type ViewItem = { type: 'user' | 'assistant' | 'tool' | 'techniques' | 'file'; text: string; reasoning?: string; reasoningOpen?: boolean; techniques?: TechniqueDto[]; file?: OrganizerFileInfo };
 export interface AgentConversation {
   id: string;
   title: string;

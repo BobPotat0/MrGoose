@@ -20,6 +20,10 @@ export class ArenaService {
   loadUrl(id: string, url: string) { return this.m?.tabs.loadUrl(id, url) ?? Promise.resolve(false); }
   setBounds(rect: { x: number; y: number; width: number; height: number }) { return this.m?.tabs.setBounds(rect) ?? Promise.resolve(false); }
   setVisible(visible: boolean) { return this.m?.tabs.setVisible(visible) ?? Promise.resolve(false); }
+  detach(): Promise<{ docked: boolean }> { return this.m?.tabs.detach?.() ?? Promise.resolve({ docked: true }); }
+  dock(): Promise<{ docked: boolean }> { return this.m?.tabs.dock?.() ?? Promise.resolve({ docked: true }); }
+  state(): Promise<{ docked: boolean }> { return this.m?.tabs.state?.() ?? Promise.resolve({ docked: true }); }
+  onDocked(callback: (s: { docked: boolean }) => void) { return this.m?.tabs.onDocked?.(callback) ?? (() => {}); }
 
   onChanged(callback: (tabs: ArenaTab[]) => void) { return this.m?.tabs.onChanged?.(callback) ?? (() => {}); }
   // UI captures its current selection once. Agent/MCP callers pass their explicit tab ID.

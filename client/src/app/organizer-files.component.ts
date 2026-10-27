@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, Output, OnChanges, OnDestroy, computed, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
-import { AgentFileContent, AgentFileInfo } from './models';
+import { OrganizerFileContent, OrganizerFileInfo } from './models';
 import { csvPreview } from './csv-preview';
 import { MarkdownPreviewComponent } from './markdown-preview.component';
 
@@ -17,14 +17,19 @@ import { MarkdownPreviewComponent } from './markdown-preview.component';
       @if (!loading() && !error() && !files().length) {
         <div class="files-empty"><span class="empty-symbol" aria-hidden="true">▤</span><h2>No files yet</h2><p>Ask Mr Goose to save a payload, report or table as a file.</p><span class="mono">.txt · .md · .json · .csv</span></div>
       }
-      <div class="file-list">
-        @for (file of files(); track file.id) {
-          <button class="file-item" type="button" (click)="select(file)" [class.active]="selected()?.id === file.id" [attr.aria-pressed]="selected()?.id === file.id">
-            <span class="file-extension mono">{{ extension(file.name) }}</span><span class="file-identity"><strong>{{ file.name }}</strong><small>{{ file.source === 'upload' ? 'Uploaded' : 'Created' }} · {{ size(file.size) }} · {{ date(file.createdAt) }}</small></span>
-          </button>
-        }
-      </div>
-      @if (selected(); as file) {
+      @if (files().length) {
+        <button class="btn ghost list-toggle" type="button" (click)="listOpen.set(!listOpen())">{{ listOpen() ? '▾' : '▸' }} {{ files().length }} file{{ files().length === 1 ? '' : 's' }}</button>
+      }
+      @if (listOpen()) {
+        <div class="file-list">
+          @for (file of files(); track file.id) {
+            <button class="file-item" type="button" (click)="select(file)" [class.active]="selected()?.id === file.id" [attr.aria-pressed]="selected()?.id === file.id">
+              <span class="file-extension mono">{{ extension(file.name) }}</span><span class="file-identity"><strong>{{ file.name }}</strong><small>{{ file.source === 'upload' ? 'Uploaded' : 'Created' }} · {{ size(file.size) }} · {{ date(file.createdAt) }}</small></span>
+            </button>
+          }
+        </div>
+      }
+      @if (!hidePreview && selected(); as file) {
         <section class="file-preview" aria-label="File preview">
           <div class="preview-title"><strong>{{ file.name }}</strong><button class="btn" type="button" (click)="download()" [disabled]="downloading()">{{ downloading() ? 'Downloading…' : 'Download' }}</button></div>
           @if (reading()) { <p class="file-note" role="status">Opening file…</p> }
@@ -53,19 +58,21 @@ import { MarkdownPreviewComponent } from './markdown-preview.component';
       }
     </aside>
   `,
-  styleUrl: './agent-files.component.css',
+  styleUrl: './organizer-files.component.css',
 })
-export class AgentFilesComponent implements OnChanges, OnDestroy {
+export class OrganizerFilesComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) sessionId = '';
   @Input() revision = 0;
   @Input() openFileId = '';
-  @Output() fileUploaded = new EventEmitter<AgentFileInfo>();
-  @Output() fileSelected = new EventEmitter<AgentFileInfo>();
+  @Input() hidePreview = false;   // the Organizer shows content in the shared inspector instead
+  readonly listOpen = signal(true);
+  @Output() fileUploaded = new EventEmitter<OrganizerFileInfo>();
+  @Output() fileSelected = new EventEmitter<OrganizerFileInfo>();
   @Output() uploadingChange = new EventEmitter<boolean>();
   private api = inject(ApiService);
-  readonly files = signal<AgentFileInfo[]>([]);
-  readonly selected = signal<AgentFileInfo | null>(null);
-  readonly preview = signal<AgentFileContent | null>(null);
+  readonly files = signal<OrganizerFileInfo[]>([]);
+  readonly selected = signal<OrganizerFileInfo | null>(null);
+  readonly preview = signal<OrganizerFileContent | null>(null);
   readonly loading = signal(false);
   readonly reading = signal(false);
   readonly downloading = signal(false);
@@ -96,7 +103,7 @@ export class AgentFilesComponent implements OnChanges, OnDestroy {
     }
     this.loading.set(true); this.error.set('');
     try {
-      const files = await this.api.agentFiles(session);
+      const files = await this.api.organizerFiles(session);
       if (this.destroyed || ticket !== this.listRequest) return;
       this.files.set(files);
       const selected = this.selected();
@@ -107,12 +114,14 @@ export class AgentFilesComponent implements OnChanges, OnDestroy {
     finally { if (!this.destroyed && ticket === this.listRequest) this.loading.set(false); }
   }
 
-  async select(file: AgentFileInfo, announce = true) {
+  async select(file: OrganizerFileInfo, announce = true) {
     const ticket = ++this.readRequest, session = this.sessionId;
-    this.selected.set(file); if (announce) this.fileSelected.emit(file); this.preview.set(null); this.reading.set(true); this.error.set('');
+    this.selected.set(file); if (announce) this.fileSelected.emit(file);
+    if (this.hidePreview) return;   // the inspector renders the content
+    this.preview.set(null); this.reading.set(true); this.error.set('');
     this.mode.set(this.extension(file.name) === 'md' ? 'markdown' : this.extension(file.name) === 'csv' ? 'table' : 'text');
     try {
-      const content = await this.api.agentFile(session, file.id);
+      const content = await this.api.organizerFile(session, file.id);
       if (!this.destroyed && ticket === this.readRequest && session === this.sessionId) this.preview.set(content);
     } catch { if (!this.destroyed && ticket === this.readRequest) this.error.set('Could not open this file. Select it to retry.'); }
     finally { if (!this.destroyed && ticket === this.readRequest) this.reading.set(false); }
@@ -123,7 +132,7 @@ export class AgentFilesComponent implements OnChanges, OnDestroy {
     if (!file || this.downloading()) return;
     this.downloading.set(true); this.error.set('');
     try {
-      const blob = await this.api.agentFileDownload(session, file.id);
+      const blob = await this.api.organizerFileDownload(session, file.id);
       if (this.destroyed || session !== this.sessionId) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a'); link.href = url; link.download = file.name; link.click();
@@ -163,7 +172,7 @@ export class AgentFilesComponent implements OnChanges, OnDestroy {
           problems.push(`${file.name}: use a supported text file up to 1 MiB.`); continue;
         }
         try {
-          const saved = await this.api.uploadAgentFile(session, file); count++;
+          const saved = await this.api.uploadOrganizerFile(session, file); count++;
           if (!this.destroyed && session === this.sessionId) this.fileUploaded.emit(saved);
         } catch { problems.push(`${file.name}: upload failed. Check UTF-8 format and retry.`); }
       }

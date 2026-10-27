@@ -7,10 +7,10 @@ using MrGoose.Backend.Data;
 namespace MrGoose.Backend.Services;
 
 /// <summary>
-/// The crafter brain's server side: builds the system prompt (ported from TENEBRIS BuildCraftSystem),
+/// The attacker brain's server side: builds the system prompt (ported from TENEBRIS BuildCraftSystem),
 /// defines the read/record tool-loop, and executes those tools against the per-model×scenario dossier.
 /// </summary>
-public class CraftService(MrGooseDb db)
+public class AttackerService(MrGooseDb db)
 {
     public record PromptSelection(string ScenarioCode, string ModelName, int[] TechniqueIds, int[] BlockIds, string[] BreakIds, bool IncludeRecon);
 

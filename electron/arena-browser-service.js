@@ -132,6 +132,14 @@ class ArenaBrowserService {
     finally { clearTimeout(timer); }
     return id;
   }
+  // Move every tab view between host windows (dock ⇄ detach). Views can only live in one window.
+  reparent(fromWindow, toWindow) {
+    for (const t of this.tabs.values()) {
+      try { fromWindow?.contentView.removeChildView(t.view); } catch { /* not attached */ }
+      try { toWindow?.contentView.addChildView(t.view); } catch { /* host gone */ }
+    }
+    this.visibility();
+  }
   select(id) { this.entry(id); this.activeTabId = id; this.visibility(); this.notify(); return this.list(); }
   close(id) { const t = this.entry(id); this.getWindow()?.contentView.removeChildView(t.view); t.view.webContents.close(); this.tabs.delete(id); if (id === this.activeTabId) this.activeTabId = this.tabs.keys().next().value || null; this.visibility(); this.notify(); return this.list(); }
   async loadUrl(id, url) { this.validateUrl(url); const t = this.entry(id); if (t.attemptId) fail('ATTEMPT_TAB_LOCKED'); await t.view.webContents.loadURL(url); return true; }

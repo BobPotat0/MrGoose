@@ -8,7 +8,7 @@ public static class ApiEndpoints
 {
     public static void MapApi(this WebApplication app)
     {
-        app.MapAgentFiles();
+        app.MapOrganizerFiles();
 
         // ---- Challenges + matrix ----
         app.MapGet("/api/challenges", async (MrGooseDb db) =>
@@ -235,17 +235,17 @@ public static class ApiEndpoints
             return Results.Ok(await imp.ImportPageSourceAsync(html));
         });
 
-        // ---- Crafter: system prompt + dossier + pickers ----
-        app.MapPost("/api/craft/system-prompt", async (CraftService.PromptSelection sel, CraftService craft) =>
+        // ---- Attacker: system prompt + dossier + pickers ----
+        app.MapPost("/api/craft/system-prompt", async (AttackerService.PromptSelection sel, AttackerService craft) =>
             Results.Ok(new { prompt = await craft.BuildSystemPromptAsync(sel) }));
 
-        app.MapGet("/api/dossier", async (string model, string scenario, CraftService craft) =>
+        app.MapGet("/api/dossier", async (string model, string scenario, AttackerService craft) =>
         {
             var st = await craft.EnsureStateAsync(model, scenario);
             return st is null ? Results.NotFound() : Results.Ok(st);
         });
 
-        app.MapPut("/api/dossier/meta", async (DossierMetaDto dto, CraftService craft, MrGooseDb db) =>
+        app.MapPut("/api/dossier/meta", async (DossierMetaDto dto, AttackerService craft, MrGooseDb db) =>
         {
             var st = await craft.EnsureStateAsync(dto.Model, dto.Scenario);
             if (st is null) return Results.NotFound();
@@ -258,7 +258,7 @@ public static class ApiEndpoints
         });
 
         // UI-driven dossier records reuse the same record_* tools the agent uses.
-        app.MapPost("/api/dossier/record", async (DossierRecordDto dto, CraftService craft) =>
+        app.MapPost("/api/dossier/record", async (DossierRecordDto dto, AttackerService craft) =>
             Results.Ok(new { result = await craft.ExecuteToolAsync(dto.Model, dto.Scenario, dto.Tool, dto.Args) }));
 
         app.MapDelete("/api/dossier/fact/{id:int}", async (int id, MrGooseDb db) =>
@@ -381,24 +381,24 @@ public static class ApiEndpoints
         app.MapPost("/api/judge-direct", async (JudgeDirectDto dto, FinderService finder) =>
             Results.Ok(await finder.JudgeRawAsync(dto.Objective, dto.Criteria, dto.JudgeContext ?? "", dto.Reply)));
 
-        // ---- Mr Goose Agent: editable system prompt + knowledge base ----
-        app.MapGet("/api/agent/system", async (MrGooseDb db) =>
+        // ---- Mr Goose Organizer: editable system prompt + knowledge base ----
+        app.MapGet("/api/organizer/system", async (MrGooseDb db) =>
         {
-            var over = (await db.Settings.FindAsync(Services.AgentService.SettingsKey))?.Value;
-            return Results.Ok(new { prompt = string.IsNullOrWhiteSpace(over) ? Services.AgentService.System : over, isCustom = !string.IsNullOrWhiteSpace(over), @default = Services.AgentService.System });
+            var over = (await db.Settings.FindAsync(Services.OrganizerService.SettingsKey))?.Value;
+            return Results.Ok(new { prompt = string.IsNullOrWhiteSpace(over) ? Services.OrganizerService.System : over, isCustom = !string.IsNullOrWhiteSpace(over), @default = Services.OrganizerService.System });
         });
-        app.MapPut("/api/agent/system", async (AgentSystemDto dto, MrGooseDb db) =>
+        app.MapPut("/api/organizer/system", async (OrganizerSystemDto dto, MrGooseDb db) =>
         {
-            var e = await db.Settings.FindAsync(Services.AgentService.SettingsKey);
-            if (e is null) db.Settings.Add(new AppSetting { Key = Services.AgentService.SettingsKey, Value = dto.Prompt }); else e.Value = dto.Prompt;
+            var e = await db.Settings.FindAsync(Services.OrganizerService.SettingsKey);
+            if (e is null) db.Settings.Add(new AppSetting { Key = Services.OrganizerService.SettingsKey, Value = dto.Prompt }); else e.Value = dto.Prompt;
             await db.SaveChangesAsync(); return Results.Ok();
         });
-        app.MapDelete("/api/agent/system", async (MrGooseDb db) =>
+        app.MapDelete("/api/organizer/system", async (MrGooseDb db) =>
         {
-            var e = await db.Settings.FindAsync(Services.AgentService.SettingsKey); if (e is not null) { db.Settings.Remove(e); await db.SaveChangesAsync(); }
-            return Results.Ok(new { prompt = Services.AgentService.System });
+            var e = await db.Settings.FindAsync(Services.OrganizerService.SettingsKey); if (e is not null) { db.Settings.Remove(e); await db.SaveChangesAsync(); }
+            return Results.Ok(new { prompt = Services.OrganizerService.System });
         });
-        app.MapGet("/api/agent/docs", async (MrGooseDb db) =>
+        app.MapGet("/api/organizer/docs", async (MrGooseDb db) =>
         {
             var ov = (await db.Settings.ToListAsync()).Where(s => s.Key.StartsWith("doc.")).ToDictionary(s => s.Key, s => s.Value);
             return Results.Ok(Services.KnowledgeDocs.All().Select(d => new
@@ -408,7 +408,7 @@ public static class ApiEndpoints
                 isCustom = ov.ContainsKey("doc." + d.Name),
             }));
         });
-        app.MapPut("/api/agent/docs", async (AgentDocDto dto, MrGooseDb db) =>
+        app.MapPut("/api/organizer/docs", async (OrganizerDocDto dto, MrGooseDb db) =>
         {
             if (!Services.KnowledgeDocs.All().Any(d => d.Name == dto.Name)) return Results.NotFound();
             var k = "doc." + dto.Name;
@@ -416,12 +416,12 @@ public static class ApiEndpoints
             if (e is null) db.Settings.Add(new AppSetting { Key = k, Value = dto.Content }); else e.Value = dto.Content;
             await db.SaveChangesAsync(); return Results.Ok();
         });
-        app.MapPost("/api/agent/docs/reset", async (MrGooseDb db) =>
+        app.MapPost("/api/organizer/docs/reset", async (MrGooseDb db) =>
         {
             var rows = (await db.Settings.ToListAsync()).Where(s => s.Key.StartsWith("doc.")).ToList();
             db.Settings.RemoveRange(rows); await db.SaveChangesAsync(); return Results.Ok(new { reset = rows.Count });
         });
-        app.MapDelete("/api/agent/docs/{name}", async (string name, MrGooseDb db) =>
+        app.MapDelete("/api/organizer/docs/{name}", async (string name, MrGooseDb db) =>
         {
             var e = await db.Settings.FindAsync("doc." + name); if (e is not null) { db.Settings.Remove(e); await db.SaveChangesAsync(); }
             return Results.Ok();
@@ -518,8 +518,8 @@ public static class ApiEndpoints
     public record JudgeDto(int SessionId, string Reply);
     public record JudgeDirectDto(string Objective, string Criteria, string? JudgeContext, string Reply);
     public record AiEditDto(string Body, string Instruction);
-    public record AgentSystemDto(string Prompt);
-    public record AgentDocDto(string Name, string Content);
+    public record OrganizerSystemDto(string Prompt);
+    public record OrganizerDocDto(string Name, string Content);
     public record EncodeDto(string? Scheme, string[]? Keys, bool Marked, string Text);
     public class PromptImport { public List<PromptFolder>? Folders { get; set; } public List<Prompt>? Prompts { get; set; } }
 }

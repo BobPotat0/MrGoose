@@ -4,7 +4,7 @@ import { BackendService } from './backend.service';
 import { ApiService } from './api.service';
 import { ToastService } from './toast.service';
 import { UsageInfo } from './models';
-import { AgentChatStore } from './agent-chat.store';
+import { OrganizerChatStore } from './organizer-chat.store';
 
 @Component({
   selector: 'app-root',
@@ -16,17 +16,18 @@ export class App {
   readonly backend = inject(BackendService);
   readonly toast = inject(ToastService);
   private api = inject(ApiService);
-  readonly chat = inject(AgentChatStore);
+  readonly chat = inject(OrganizerChatStore);
   readonly router = inject(Router);
 
   readonly needsKey = signal(false);
   readonly usage = signal<UsageInfo | null>(null);
 
   readonly workspaceNav = [
-    { path: 'assistant', label: 'Mr Goose Agent' },
+    { path: 'organizer', label: 'Mr Goose Organizer' },
     { path: 'workbench', label: 'Break Workbench' },
   ];
   readonly libraryNav = [
+    { path: 'sources', label: 'Source Library' },
     { path: 'prompts', label: 'Prompt Library' },
     { path: 'techniques', label: 'Technique Library' },
     { path: 'challenges', label: 'Challenge Library' },
@@ -35,13 +36,13 @@ export class App {
   openSession(id: string) {
     if (this.chat.streaming() || this.chat.uploading()) return;
     this.chat.selectChat(id);
-    void this.router.navigate(['/assistant']);
+    void this.router.navigate(['/organizer']);
   }
 
   newSession() {
     if (this.chat.streaming() || this.chat.uploading()) return;
     this.chat.newChat();
-    void this.router.navigate(['/assistant']);
+    void this.router.navigate(['/organizer']);
   }
 
   constructor() {

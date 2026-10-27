@@ -48,8 +48,8 @@
       <div class="session-list">
         @for (session of chat.sessions(); track session.id) {
           <button class="session-item" type="button" (click)="openSession(session.id)" [disabled]="chat.streaming() || chat.uploading()"
-            [class.active]="router.url.startsWith('/assistant') && chat.activeId() === session.id"
-            [attr.aria-current]="router.url.startsWith('/assistant') && chat.activeId() === session.id ? 'page' : null" [title]="session.title">
+            [class.active]="router.url.startsWith('/organizer') && chat.activeId() === session.id"
+            [attr.aria-current]="router.url.startsWith('/organizer') && chat.activeId() === session.id ? 'page' : null" [title]="session.title">
             <span class="session-title">{{ session.title }}</span>
             <time class="session-date" [attr.datetime]="session.updatedAt">{{ sessionDate(session.updatedAt) }}</time>
           </button>
@@ -91,7 +91,7 @@
     @if (backend.health() === 'down') {
       <div class="banner" style="margin:12px 16px 0">Backend offline — start the app with <span class="mono">npm run dev</span>.</div>
     } @else if (needsKey()) {
-      <a class="banner" routerLink="settings" style="margin:12px 16px 0;display:block">No OpenRouter key set — add it in Settings to use the crafter, judge and instructor. →</a>
+      <a class="banner" routerLink="settings" style="margin:12px 16px 0;display:block">No OpenRouter key set — add it in Settings to use the attacker, judge and instructor. →</a>
     }
 
     <main class="content">

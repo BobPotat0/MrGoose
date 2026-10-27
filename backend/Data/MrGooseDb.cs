@@ -28,8 +28,10 @@ public class MrGooseDb(DbContextOptions<MrGooseDb> options) : DbContext(options)
     public DbSet<PromptFolder> PromptFolders => Set<PromptFolder>();
     public DbSet<KnowledgeNote> KnowledgeNotes => Set<KnowledgeNote>();
     public DbSet<OpenRouterKey> OpenRouterKeys => Set<OpenRouterKey>();
+    public DbSet<SourceLink> SourceLinks => Set<SourceLink>();
+    public DbSet<SourceDoc> SourceDocs => Set<SourceDoc>();
 
-    public DbSet<AgentFile> AgentFiles => Set<AgentFile>();
+    public DbSet<OrganizerFile> OrganizerFiles => Set<OrganizerFile>();
     public DbSet<ControlAttempt> ControlAttempts => Set<ControlAttempt>();
     public DbSet<ControlObservation> ControlObservations => Set<ControlObservation>();
 
@@ -37,7 +39,7 @@ public class MrGooseDb(DbContextOptions<MrGooseDb> options) : DbContext(options)
     {
         b.Entity<ControlAttempt>().HasIndex(x => new { x.Owner, x.RequestKey }).IsUnique();
         b.Entity<ControlObservation>().HasIndex(x => new { x.AttemptId, x.RequestKey }).IsUnique();
-        b.Entity<AgentFile>().HasIndex(f => f.SessionId);
+        b.Entity<OrganizerFile>().HasIndex(f => f.SessionId);
         b.Entity<AppSetting>().HasKey(x => x.Key);
         b.Entity<Challenge>().HasIndex(c => c.Slug).IsUnique();
         b.Entity<Scenario>().HasIndex(s => new { s.ChallengeId, s.Code });

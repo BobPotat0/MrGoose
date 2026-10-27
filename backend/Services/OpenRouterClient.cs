@@ -8,7 +8,7 @@ namespace MrGoose.Backend.Services;
 public record ChatMsg(string Role, string Content);
 
 /// <summary>Thin OpenRouter chat-completions client: SSE streaming for simple chat + a non-streaming
-/// tool-calling round for the crafter agent loop. The victim's responses come from the real arena,
+/// tool-calling round for the attacker agent loop. The victim's responses come from the real arena,
 /// never from here.</summary>
 public class OpenRouterClient(IHttpClientFactory factory)
 {

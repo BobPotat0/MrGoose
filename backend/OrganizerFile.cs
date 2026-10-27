@@ -1,7 +1,7 @@
 namespace MrGoose.Backend;
 
 /// <summary>A text artifact owned by a single local agent conversation.</summary>
-public class AgentFile
+public class OrganizerFile
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string SessionId { get; set; } = "";

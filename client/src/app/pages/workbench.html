@@ -406,7 +406,7 @@
           }
           @if (!d.tools.length) {
             <p class="muted" style="margin-top: 8px">
-              Nothing captured yet — paste a victim run into Find Break; the crafter records tools
+              Nothing captured yet — paste a victim run into Find Break; the attacker records tools
               here.
             </p>
           }
@@ -565,14 +565,30 @@
     </div>
 
     <div class="workspace attack-workspace" #ws>
-      <!-- LEFT: embedded arena (resizable via the splitter) -->
-      <div class="pane arena-panel" [style.flexBasis.%]="arenaPct()">
-        <mg-arena-pane (picked)="onPick($event)"></mg-arena-pane>
-      </div>
-      <div class="splitter" (mousedown)="startDrag($event)" title="drag to resize the arena"></div>
+      @if (arenaDocked()) {
+        <!-- LEFT: embedded arena, resizable via the splitter -->
+        <div class="pane arena-panel" [style.flexBasis.%]="arenaPct()">
+          <mg-arena-pane (picked)="onPick($event)" (dockedChange)="arenaDocked.set($event)"></mg-arena-pane>
+        </div>
+        <div class="splitter" (mousedown)="startDrag($event)" title="drag to resize the arena"></div>
+      }
 
-      <!-- RIGHT: craft agent -->
+      <!-- RIGHT: craft agent (full width when the arena is detached) -->
       <div class="pane scroll craft-panel">
+        @if (!arenaDocked()) {
+          <mg-arena-pane (picked)="onPick($event)" (dockedChange)="arenaDocked.set($event)"></mg-arena-pane>
+        }
+        <div class="row spread" style="margin-bottom: 8px">
+          <div class="row" style="gap: 6px" role="tablist" aria-label="Crafting mode">
+            <button class="btn" [class.primary]="craftMode() === 'direct'" (click)="setCraftMode('direct')">
+              Direct chat
+            </button>
+            <button class="btn" [class.primary]="craftMode() === 'mcp'" (click)="setCraftMode('mcp')">
+              MCP
+            </button>
+          </div>
+          <span class="dim" style="font-size: 11px">{{ craftMode() === 'mcp' ? 'Your external Claude/GPT crafts via MCP' : 'Mr Goose Attacker crafts via OpenRouter' }}</span>
+        </div>
         <div class="card source-card">
           <div class="row spread">
             <h2>Craft context</h2>
@@ -586,9 +602,7 @@
             >
               Reference prompts <span>{{ selBreaks().size }}</span>
             </button>
-            <button class="btn" (click)="openOverlay('blocks')">
-              Building blocks <span>{{ selBlocks().size }}</span>
-            </button>
+            <button class="btn" (click)="openOverlay('blocks')">Building blocks ↗</button>
             <button class="btn" (click)="openOverlay('techs')">
               Techniques <span>{{ selTechs().size }}</span>
             </button>
@@ -598,12 +612,13 @@
             <button class="btn" (click)="openOverlay('markers')">
               Markers <span>{{ markers().length }}</span>
             </button>
-            <button class="btn" (click)="openPrompt()">System prompt ↗</button>
+            <button class="btn" (click)="openPrompt()">Model settings ↗</button>
           </div>
           <label class="recon-option"
             ><input type="checkbox" [(ngModel)]="includeRecon" /> Include scenario recon</label
           >
         </div>
+        @if (craftMode() === 'direct') {
         <div class="card craft-transcript" aria-label="Craft conversation">
           @for (v of view(); track $index) {
             @if (v.type === 'tool') {
@@ -669,10 +684,22 @@
             </p>
           }
         </div>
+        } @else {
+        <div class="card craft-transcript" aria-label="MCP mode">
+          <p class="label-mono" style="color: var(--amber)">Attacker runs via MCP</p>
+          <p class="dim" style="font-size: 12.5px; line-height: 1.55; margin-top: 6px">
+            Your external Claude/GPT does the crafting. It pulls the <strong>Craft context</strong> above
+            through the <span class="mono">read_attack_context</span> MCP tool, then fills the arena with
+            <span class="mono">attempt_prepare</span>. No in-app chat here —
+            <strong>Launch/Submit always stays manual</strong>.
+          </p>
+        </div>
+        }
 
         <div class="card craft-controls">
+          @if (craftMode() === 'direct') {
           <label class="field"
-            >Message the crafter<textarea
+            >Message the attacker<textarea
               class="textarea"
               [(ngModel)]="input"
               (keydown.control.enter)="send()"
@@ -680,11 +707,18 @@
             ></textarea>
           </label>
           <div class="row compose-actions">
-            <span class="dim">Ctrl+Enter to send</span><span class="grow"></span
-            ><button class="btn primary" (click)="send()" [disabled]="streaming() || !input.trim()">
+            <span class="dim">Ctrl+Enter to send</span><span class="grow"></span>
+            @if (view().length) {
+              <button class="btn" (click)="clearChat()" [disabled]="streaming()">Clear</button>
+            }
+            @if (streaming()) {
+              <button class="btn" (click)="stop()">Stop</button>
+            }
+            <button class="btn primary" (click)="send()" [disabled]="streaming() || !input.trim()">
               {{ streaming() ? 'Crafting…' : 'Send' }}
             </button>
           </div>
+          }
           <div class="payload-actions">
             <span class="label-mono">Payload</span
             ><button
@@ -779,19 +813,26 @@
           }
 
           @if (overlay() === 'blocks') {
-            @for (b of blocks(); track b.id) {
-              <label class="row" style="gap: 8px; margin-top: 7px"
-                ><input
-                  type="checkbox"
-                  [checked]="selBlocks().has(b.id)"
-                  (change)="pick(selBlocks, b.id)"
-                />
-                <span class="chip">{{ b.type }}</span
-                ><span class="dim" style="font-size: 12px">{{ b.content }}</span></label
-              >
-            }
-            @if (!blocks().length) {
-              <p class="muted" style="font-size: 12px">no building blocks</p>
+            <p class="muted" style="font-size: 11px; margin-bottom: 6px">Click a block to insert it into the message.</p>
+            <div class="label-mono" style="margin: 8px 0 4px">System tags</div>
+            <div class="row" style="flex-wrap: wrap; gap: 6px">
+              @for (t of systemTags; track t) {
+                <button class="btn mono" style="font-size: 11px" (click)="insertBlock(t)">{{ t }}</button>
+              }
+            </div>
+            <div class="label-mono" style="margin: 12px 0 4px">Escapes — JSON field breakout</div>
+            <div class="row" style="flex-wrap: wrap; gap: 6px">
+              @for (e of escapes; track e) {
+                <button class="btn mono" style="font-size: 11px" (click)="insertBlock(e)">{{ e }}</button>
+              }
+            </div>
+            @if (blocks().length) {
+              <div class="label-mono" style="margin: 12px 0 4px">Reusable blocks</div>
+              @for (b of blocks(); track b.id) {
+                <button class="btn" style="display: block; width: 100%; text-align: left; margin-top: 6px" (click)="insertBlock(b.content)">
+                  <span class="chip">{{ b.type }}</span> <span class="dim" style="font-size: 11.5px">{{ b.content }}</span>
+                </button>
+              }
             }
           }
 
@@ -858,7 +899,7 @@
             }
             @if (!dossier()?.tools?.length) {
               <p class="muted" style="font-size: 12px; margin-top: 8px">
-                no tools captured — paste a victim run into the crafter to record them.
+                no tools captured — paste a victim run into the attacker to record them.
               </p>
             }
           }
@@ -888,6 +929,21 @@
           }
 
           @if (overlay() === 'prompt') {
+            <div class="card alt" style="margin-bottom: 10px">
+              <div class="row spread">
+                <span class="label-mono">Model</span>
+                <span class="mono dim" style="font-size: 11px">current: {{ currentModel() || '—' }}</span>
+              </div>
+              <div class="row" style="margin-top: 6px; gap: 6px">
+                <input class="input grow" [(ngModel)]="modelQuery" (keydown.enter)="searchModels()" placeholder="search OpenRouter models…" />
+                <button class="btn" (click)="searchModels()">search</button>
+              </div>
+              @for (m of modelResults(); track m.id) {
+                <button class="btn" style="width: 100%; justify-content: space-between; margin-top: 4px" (click)="pickModel(m.id)">
+                  <span>{{ m.name }}</span><span class="mono dim" style="font-size: 10px">{{ m.id }}</span>
+                </button>
+              }
+            </div>
             <div class="row" style="margin-bottom: 8px">
               <button class="btn" (click)="resyncPrompt()">↻ re-sync from selection</button
               ><span class="muted" style="font-size: 11px; margin-left: 8px"

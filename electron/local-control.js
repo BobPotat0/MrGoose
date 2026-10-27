@@ -7,6 +7,8 @@ const { operations } = require('../mcp/catalog.cjs');
 const { fail, ControlError } = require('./arena-browser-service');
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(canonical(value))).digest('hex');
+// Scopes granted to the auto-paired local client. Organizer/attack scopes cover the role tools.
+const DEFAULT_SCOPES = ['library.read', 'attempt.read', 'attempt.prepare', 'window.present', 'organizer.read', 'organizer.write', 'attack.read'];
 
 function atomicJson(file, value) {
   const temporary = file + '.' + randomUUID() + '.tmp';
@@ -36,7 +38,15 @@ class LocalControl {
     try { local = JSON.parse(fs.readFileSync(localPath, 'utf8')); } catch {}
     if (!local || !this.clients().some(c => c.id === local.clientId && c.tokenHash === hash(local.token))) {
       const issued = this.pair('Local user');
-      atomicJson(localPath, JSON.parse(fs.readFileSync(issued.credentialPath, 'utf8')));
+      local = JSON.parse(fs.readFileSync(issued.credentialPath, 'utf8'));
+      atomicJson(localPath, local);
+    }
+    // keep the local client's scopes current when new role capabilities ship
+    const registry = this.clients();
+    const localEntry = local && registry.find(c => c.id === local.clientId);
+    if (localEntry && DEFAULT_SCOPES.some(s => !localEntry.scopes.includes(s))) {
+      localEntry.scopes = [...new Set([...localEntry.scopes, ...DEFAULT_SCOPES])];
+      atomicJson(this.registryPath, registry);
     }
   }
   clients() { return JSON.parse(fs.readFileSync(this.registryPath, 'utf8')); }
@@ -45,7 +55,7 @@ class LocalControl {
     command: this.runtimePath, args: [this.adapterPath], env: { ELECTRON_RUN_AS_NODE: '1' }, access: 'current OS user; no manual authorization' }; }
   pair(name) {
     if (typeof name !== 'string' || !/^[\w -]{1,60}$/.test(name)) fail('INVALID_CLIENT_NAME');
-    const client = { id: randomUUID(), name, tokenHash: '', scopes: ['library.read', 'attempt.read', 'attempt.prepare', 'window.present'], createdAt: new Date().toISOString() };
+    const client = { id: randomUUID(), name, tokenHash: '', scopes: [...DEFAULT_SCOPES], createdAt: new Date().toISOString() };
     const token = randomBytes(32).toString('hex'); client.tokenHash = hash(token);
     atomicJson(this.registryPath, [...this.clients(), client]);
     const credentialPath = path.join(this.directory, client.id + '.credential.json');
@@ -116,6 +126,7 @@ class LocalControl {
     const args = parsed.data, owner = client.id;
     if (operation === 'mrgoose_status') return { version: 1, generation: this.browser.generation, transport: 'stdio', collector: 'unavailable', runIdentity: 'unverified', manualSubmitOnly: true, contextVerification: 'operator_required', capacity50Verified: false, library: 'app only; separate research corpus not integrated' };
     if (operation.startsWith('library_')) return this.data(operation, args);
+    if (operation === 'read_attack_context' || operation === 'organizer_catalog' || operation === 'organizer_run') return this.data(operation, args);
     if (operation === 'arena_tabs') return this.browser.list().filter(t => this.browser.tabs.get(t.id).owner === owner);
     if (operation === 'arena_profiles') return this.profiles();
     if (operation === 'arena_open_tab') {

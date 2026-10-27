@@ -5,7 +5,8 @@ import {
   ChallengeSummary, ChallengeDetail, PromptDto, TechniqueDto, TechniqueTagDto, EncodingTransform,
   SubmissionDto, SettingsDto, DossierState, BuildingBlockDto, BreakItem, PromptSelection,
   ScenarioDto, FinderSummary, ChatSessionDto, ChatTurnDto, JudgeResult, FolderDto,
-  KnowledgeNote, AgentDoc, AgentSystem, KeyInfo, ModelInfo, UsageInfo, AgentFileInfo, AgentFileContent,
+  KnowledgeNote, OrganizerDoc, OrganizerSystem, KeyInfo, ModelInfo, UsageInfo, OrganizerFileInfo, OrganizerFileContent,
+  SourceLinkDto, SourceDocDto,
 } from './models';
 
 /** Typed REST wrapper over the C# backend. Methods return Promises for easy async/await in pages. */
@@ -15,11 +16,12 @@ export class ApiService {
   private base = window.mrgoose?.backendUrl ?? 'http://127.0.0.1:5174';
   private url(p: string) { return `${this.base}${p}`; }
 
-  agentFiles(sessionId: string) { return firstValueFrom(this.http.get<AgentFileInfo[]>(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files`))); }
-  uploadAgentFile(sessionId: string, file: File) { const form = new FormData(); form.append('file', file); return firstValueFrom(this.http.post<AgentFileInfo>(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files`), form)); }
-  agentFile(sessionId: string, id: string) { return firstValueFrom(this.http.get<AgentFileContent>(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(id)}`))); }
-  agentFileDownload(sessionId: string, id: string) { return firstValueFrom(this.http.get(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(id)}/download`), { responseType: 'blob' })); }
-  deleteAgentFiles(sessionId: string) { return firstValueFrom(this.http.delete(this.url(`/api/agent/sessions/${encodeURIComponent(sessionId)}/files`))); }
+  organizerFiles(sessionId: string) { return firstValueFrom(this.http.get<OrganizerFileInfo[]>(this.url(`/api/organizer/sessions/${encodeURIComponent(sessionId)}/files`))); }
+  uploadOrganizerFile(sessionId: string, file: File) { const form = new FormData(); form.append('file', file); return firstValueFrom(this.http.post<OrganizerFileInfo>(this.url(`/api/organizer/sessions/${encodeURIComponent(sessionId)}/files`), form)); }
+  organizerFile(sessionId: string, id: string) { return firstValueFrom(this.http.get<OrganizerFileContent>(this.url(`/api/organizer/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(id)}`))); }
+  organizerFileDownload(sessionId: string, id: string) { return firstValueFrom(this.http.get(this.url(`/api/organizer/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(id)}/download`), { responseType: 'blob' })); }
+  deleteOrganizerFiles(sessionId: string) { return firstValueFrom(this.http.delete(this.url(`/api/organizer/sessions/${encodeURIComponent(sessionId)}/files`))); }
+  updateOrganizerFile(sessionId: string, id: string, content: string) { return firstValueFrom(this.http.put(this.url(`/api/organizer/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(id)}`), { content })); }
 
   challenges() { return firstValueFrom(this.http.get<ChallengeSummary[]>(this.url('/api/challenges'))); }
   challenge(slug: string) { return firstValueFrom(this.http.get<ChallengeDetail>(this.url(`/api/challenges/${slug}`))); }
@@ -68,7 +70,7 @@ export class ApiService {
   }
   delRecon(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/recon/${id}`))); }
 
-  // crafter + dossier
+  // attacker + dossier
   systemPrompt(sel: PromptSelection) { return firstValueFrom(this.http.post<{ prompt: string }>(this.url('/api/craft/system-prompt'), sel)); }
   dossier(model: string, scenario: string) {
     return firstValueFrom(this.http.get<DossierState>(this.url(`/api/dossier?model=${encodeURIComponent(model)}&scenario=${encodeURIComponent(scenario)}`)));
@@ -103,13 +105,14 @@ export class ApiService {
   judgeDirect(objective: string, criteria: string, reply: string, judgeContext = '') { return firstValueFrom(this.http.post<JudgeResult>(this.url('/api/judge-direct'), { objective, criteria, judgeContext, reply })); }
 
   // mr goose agent: system prompt + knowledge base
-  agentSystem() { return firstValueFrom(this.http.get<AgentSystem>(this.url('/api/agent/system'))); }
-  setAgentSystem(prompt: string) { return firstValueFrom(this.http.put(this.url('/api/agent/system'), { prompt })); }
-  resetAgentSystem() { return firstValueFrom(this.http.delete<{ prompt: string }>(this.url('/api/agent/system'))); }
-  agentDocs() { return firstValueFrom(this.http.get<AgentDoc[]>(this.url('/api/agent/docs'))); }
-  saveDoc(name: string, content: string) { return firstValueFrom(this.http.put(this.url('/api/agent/docs'), { name, content })); }
-  resetDoc(name: string) { return firstValueFrom(this.http.delete(this.url(`/api/agent/docs/${encodeURIComponent(name)}`))); }
-  resetDocs() { return firstValueFrom(this.http.post(this.url('/api/agent/docs/reset'), {})); }
+  organizerSystem() { return firstValueFrom(this.http.get<OrganizerSystem>(this.url('/api/organizer/system'))); }
+  setOrganizerSystem(prompt: string) { return firstValueFrom(this.http.put(this.url('/api/organizer/system'), { prompt })); }
+  resetOrganizerSystem() { return firstValueFrom(this.http.delete<{ prompt: string }>(this.url('/api/organizer/system'))); }
+  organizerDocs() { return firstValueFrom(this.http.get<OrganizerDoc[]>(this.url('/api/organizer/docs'))); }
+  saveDoc(name: string, content: string) { return firstValueFrom(this.http.put(this.url('/api/organizer/docs'), { name, content })); }
+  resetDoc(name: string) { return firstValueFrom(this.http.delete(this.url(`/api/organizer/docs/${encodeURIComponent(name)}`))); }
+  resetDocs() { return firstValueFrom(this.http.post(this.url('/api/organizer/docs/reset'), {})); }
+  setOrganizerSession(sessionId: string) { return firstValueFrom(this.http.put(this.url('/api/organizer/active-session'), { sessionId })); }
   knowledge() { return firstValueFrom(this.http.get<KnowledgeNote[]>(this.url('/api/knowledge'))); }
   addKnowledge(n: Partial<KnowledgeNote>) { return firstValueFrom(this.http.post<KnowledgeNote>(this.url('/api/knowledge'), n)); }
   updateKnowledge(id: number, n: Partial<KnowledgeNote>) { return firstValueFrom(this.http.put<KnowledgeNote>(this.url(`/api/knowledge/${id}`), n)); }
@@ -125,6 +128,17 @@ export class ApiService {
   deleteKey(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/keys/${id}`))); }
   models(q: string) { return firstValueFrom(this.http.get<ModelInfo[]>(this.url(`/api/models?q=${encodeURIComponent(q)}`))); }
   usage() { return firstValueFrom(this.http.get<UsageInfo>(this.url('/api/usage'))); }
+
+  // source library — research links + documents (PDF/text)
+  sourceLinks() { return firstValueFrom(this.http.get<SourceLinkDto[]>(this.url('/api/sources/links'))); }
+  addSourceLink(l: Partial<SourceLinkDto>) { return firstValueFrom(this.http.post<SourceLinkDto>(this.url('/api/sources/links'), l)); }
+  updateSourceLink(id: number, l: Partial<SourceLinkDto>) { return firstValueFrom(this.http.put<SourceLinkDto>(this.url(`/api/sources/links/${id}`), l)); }
+  deleteSourceLink(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/sources/links/${id}`))); }
+  sourceDocs() { return firstValueFrom(this.http.get<SourceDocDto[]>(this.url('/api/sources/docs'))); }
+  uploadSourceDoc(file: File, description = '') { const fd = new FormData(); fd.append('file', file); fd.append('description', description); return firstValueFrom(this.http.post<SourceDocDto>(this.url('/api/sources/docs'), fd)); }
+  sourceDocContent(id: number) { return firstValueFrom(this.http.get(this.url(`/api/sources/docs/${id}/content`), { responseType: 'blob' })); }
+  sourceDocText(id: number) { return firstValueFrom(this.http.get<{ id: number; name: string; type: string; description: string; text: string }>(this.url(`/api/sources/docs/${id}/text`))); }
+  deleteSourceDoc(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/sources/docs/${id}`))); }
 
   importZip(file: File) {
     const fd = new FormData();

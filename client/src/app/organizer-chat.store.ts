@@ -1,14 +1,15 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { BackendService, ChatMsg } from './backend.service';
-import { AgentFileInfo } from './models';
+import { OrganizerFileInfo } from './models';
 import { ArenaService } from './arena.service';
 import { ToastService } from './toast.service';
-import { AgentConversation, readAgentHistory, sessionTitle, ViewItem } from './agent-chat-history';
-export type { ViewItem } from './agent-chat-history';
+import { AgentConversation, readAgentHistory, sessionTitle, ViewItem } from './organizer-chat-history';
+import { toolLabel } from './tool-labels';
+export type { ViewItem } from './organizer-chat-history';
 
-/** Local, persistent conversations for the Mr Goose Agent; only the active chat is sent to the model. */
+/** Local, persistent conversations for the Mr Goose Organizer; only the active chat is sent to the model. */
 @Injectable({ providedIn: 'root' })
-export class AgentChatStore {
+export class OrganizerChatStore {
   private backend = inject(BackendService);
   private arena = inject(ArenaService);
   private toast = inject(ToastService);
@@ -29,7 +30,7 @@ export class AgentChatStore {
   constructor() {
     this.restore();
     // register the page-action handler once (persists for the app lifetime)
-    this.backend.onAgentPageAction((a) => this.handlePageAction(a));
+    this.backend.onOrganizerPageAction((a) => this.handlePageAction(a));
   }
 
   newChat() {
@@ -57,7 +58,7 @@ export class AgentChatStore {
 
   beginUpload() { this.uploading.set(true); this.save(); }
 
-  recordFile(file: AgentFileInfo) {
+  recordFile(file: OrganizerFileInfo) {
     if (!this.view().some(v => v.type === 'file' && v.file?.id === file.id))
       this.view.update(v => [...v, { type: 'file', text: file.name, file }]);
     this.filesRevision.update(n => n + 1); this.save();
@@ -130,10 +131,10 @@ export class AgentChatStore {
     this.streaming.set(true);
     this.save();
     let full = '';
-    await this.backend.agentChat(
+    await this.backend.organizerChat(
       this.convo,
       (tok) => { full += tok; this.appendAsst('text', tok); },
-      (name, args) => { this.view.update(v => [...v, { type: 'tool', text: `${name} ${this.short(args)}` }]); this.save(); },
+      (name) => { this.view.update(v => [...v, { type: 'tool', text: toolLabel(name) }]); this.save(); },
       (ok) => { this.filesRevision.update(n => n + 1); this.streaming.set(false); if (full) this.convo.push({ role: 'assistant', content: full }); this.save(); if (!ok) this.toast.err('agent failed — check connection and OpenRouter settings'); },
       (tok) => this.appendAsst('reasoning', tok),
       (rows) => { this.view.update(v => [...v, { type: 'techniques', text: 'Technique library', techniques: rows }]); this.save(); },
@@ -172,9 +173,9 @@ export class AgentChatStore {
     else if (a.name === 'arena_close_tab') res = { ok: true, note: JSON.stringify(await this.arena.close(args.id)) };
     else res = { ok: false, note: 'unknown page action' };
     } catch (error) { res = { ok: false, note: error instanceof Error ? error.message : 'Page action failed' }; }
-    this.view.update(v => [...v, { type: 'tool', text: `page ${a.name} → ${res.ok ? 'ok' : (res.note || 'failed')}` }]);
+    this.view.update(v => [...v, { type: 'tool', text: `${toolLabel(a.name)} → ${res.ok ? 'ok' : (res.note || 'failed')}` }]);
     this.save();
-    this.backend.agentPageResult(a.id, JSON.stringify(res));
+    this.backend.organizerPageResult(a.id, JSON.stringify(res));
   }
 
   private short(s: string) { return s.length > 80 ? s.slice(0, 80) + '…' : s; }

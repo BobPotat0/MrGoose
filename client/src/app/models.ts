@@ -30,8 +30,8 @@ export interface KeyInfo { id: number; name: string; active: boolean; last4: str
 export interface ModelInfo { id: string; name: string; prompt: string; completion: string; }
 export interface UsageInfo { hasKey: boolean; spentToday: number | null; balance: number | null; }
 export interface KnowledgeNote { id: number; title: string; content: string; }
-export interface AgentDoc { name: string; content: string; isCustom?: boolean; }
-export interface AgentSystem { prompt: string; isCustom: boolean; default: string; }
+export interface OrganizerDoc { name: string; content: string; isCustom?: boolean; }
+export interface OrganizerSystem { prompt: string; isCustom: boolean; default: string; }
 
 export interface DossierState {
   id: number; scenarioCode: string; verdict: string; dossier: string;
@@ -65,6 +65,7 @@ export interface MrGooseApi {
     status(): Promise<{ profiles: unknown[]; enabled: boolean; command: string; args: string[]; env: Record<string, string> }>;
     saveProfile(profile: unknown): Promise<void>;
   };
+  openUrl?(url: string): Promise<boolean>;
   tabs: {
     create(url?: string): Promise<string>;
     select(id: string): Promise<ArenaTab[]>;
@@ -75,6 +76,10 @@ export interface MrGooseApi {
     loadUrl(id: string, url: string): Promise<boolean>;
     setBounds(rect: { x: number; y: number; width: number; height: number }): Promise<boolean>;
     setVisible(visible: boolean): Promise<boolean>;
+    detach?: () => Promise<{ docked: boolean }>;
+    dock?: () => Promise<{ docked: boolean }>;
+    state?: () => Promise<{ docked: boolean }>;
+    onDocked?: (callback: (s: { docked: boolean }) => void) => () => void;
   };
   bridge: {
     fillField(tabId: string, selector: string, value: string): Promise<BridgeResult>;
@@ -89,5 +94,8 @@ declare global {
   interface Window { mrgoose?: MrGooseApi; }
 }
 
-export interface AgentFileInfo { id: string; name: string; size: number; createdAt: string; source?: 'agent' | 'upload'; }
-export interface AgentFileContent { file: AgentFileInfo; content: string; }
+export interface OrganizerFileInfo { id: string; name: string; size: number; createdAt: string; source?: 'agent' | 'upload'; }
+export interface OrganizerFileContent { file: OrganizerFileInfo; content: string; }
+
+export interface SourceLinkDto { id: number; title: string; url: string; description: string; createdAt: string; }
+export interface SourceDocDto { id: number; name: string; type: string; description: string; size: number; hasText: boolean; createdAt: string; }

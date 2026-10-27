@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { AgentChatStore } from './agent-chat.store';
+import { OrganizerChatStore } from './organizer-chat.store';
 import { BackendService } from './backend.service';
 import { ArenaService } from './arena.service';
 import { ApiService } from './api.service';
 import { ToastService } from './toast.service';
-import { AssistantPage } from './pages/assistant';
-import { readAgentHistory } from './agent-chat-history';
+import { OrganizerPage } from './pages/organizer';
+import { readAgentHistory } from './organizer-chat-history';
 
 const key = 'mg.agent-history.v1:test-backend';
 const technique = { id: 17, slug: '', title: '<img src=x onerror=alert(1)>', summary: 'Custom summary', whenItWorks: 'Only with the right surface', example: '  <script>alert(1)</script>\n{{marker}} 🪿', tags: 'indirect', builtin: false };
@@ -16,15 +16,15 @@ describe('Agent chat history and technique table', () => {
   let requests: any[][];
   let backend: any;
   let api: any;
-  const makeStore = () => TestBed.runInInjectionContext(() => new AgentChatStore());
+  const makeStore = () => TestBed.runInInjectionContext(() => new OrganizerChatStore());
 
   beforeEach(() => {
     localStorage.clear(); requests = [];
-    backend = { backendUrl: 'test-backend', hub: signal('connected'), onAgentPageAction: vi.fn(),
-      agentChat: vi.fn(async (messages, token, _tool, done, _reasoning, table) => {
+    backend = { backendUrl: 'test-backend', hub: signal('connected'), onOrganizerPageAction: vi.fn(),
+      organizerChat: vi.fn(async (messages, token, _tool, done, _reasoning, table) => {
         requests.push(structuredClone(messages)); callbacks = { token, done, table };
       }) };
-    api = { agentSystem: async () => ({ prompt: '', isCustom: false }), agentDocs: async () => [], knowledge: async () => [], settings: async () => ({ model: 'test/model' }), agentFiles: async () => [], deleteAgentFiles: async () => {} };
+    api = { organizerSystem: async () => ({ prompt: '', isCustom: false }), organizerDocs: async () => [], knowledge: async () => [], settings: async () => ({ model: 'test/model' }), organizerFiles: async () => [], deleteOrganizerFiles: async () => {} };
     TestBed.configureTestingModule({ providers: [
       { provide: BackendService, useValue: backend }, { provide: ArenaService, useValue: { available: false } },
       { provide: ToastService, useValue: { err: vi.fn(), ok: vi.fn() } }, { provide: ApiService, useValue: api },
@@ -90,7 +90,7 @@ describe('Agent chat history and technique table', () => {
     const restored = makeStore(); expect(restored.view()[0].file).toEqual(file);
     await restored.send('Review the attached notes');
     expect(requests.at(-1)).toEqual([{ role: 'user', content: 'Review the attached notes' }]); callbacks.done(true);
-    const fixture = TestBed.createComponent(AssistantPage); fixture.detectChanges();
+    const fixture = TestBed.createComponent(OrganizerPage); fixture.detectChanges();
     const page = fixture.componentInstance; page.chat.recordFile(file); page.showFiles.set(false); fixture.detectChanges();
     (fixture.nativeElement.querySelector('.file-card') as HTMLButtonElement).click();
     expect(page.showFiles()).toBe(true); expect(page.fileFocus()?.id).toBe('upload-id');
@@ -114,10 +114,10 @@ describe('Agent chat history and technique table', () => {
   });
 
   it('hides system prompt and knowledge base behind Instructions and preserves editor actions', async () => {
-    api.agentSystem = async () => ({ prompt: 'Existing instructions', isCustom: true });
-    api.agentDocs = async () => [{ name: 'overview.md', content: 'Existing docs' }];
-    api.setAgentSystem = vi.fn(async () => {});
-    const fixture = TestBed.createComponent(AssistantPage); await fixture.whenStable(); fixture.detectChanges();
+    api.organizerSystem = async () => ({ prompt: 'Existing instructions', isCustom: true });
+    api.organizerDocs = async () => [{ name: 'overview.md', content: 'Existing docs' }];
+    api.setOrganizerSystem = vi.fn(async () => {});
+    const fixture = TestBed.createComponent(OrganizerPage); await fixture.whenStable(); fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
     expect(root.querySelector('#agent-instructions')).toBeNull();
     const toggle = root.querySelector('[aria-controls="agent-instructions"]') as HTMLButtonElement;
@@ -127,12 +127,12 @@ describe('Agent chat history and technique table', () => {
     expect(root.querySelector('#agent-instructions')?.textContent).toContain('system prompt');
     fixture.componentInstance.sysPrompt = 'Updated instructions';
     await fixture.componentInstance.saveSys();
-    expect(api.setAgentSystem).toHaveBeenCalledWith('Updated instructions');
+    expect(api.setOrganizerSystem).toHaveBeenCalledWith('Updated instructions');
     toggle.click(); fixture.detectChanges(); expect(root.querySelector('#agent-instructions')).toBeNull();
   });
 
   it('sends with Enter, keeps Shift+Enter and IME composition, and keeps a draft while streaming', async () => {
-    const fixture = TestBed.createComponent(AssistantPage); fixture.detectChanges();
+    const fixture = TestBed.createComponent(OrganizerPage); fixture.detectChanges();
     const page = fixture.componentInstance;
     page.input = 'draft';
     const shift = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, cancelable: true });
@@ -145,7 +145,7 @@ describe('Agent chat history and technique table', () => {
   });
 
   it('renders the tool table as escaped text, including an empty-library state', async () => {
-    const fixture = TestBed.createComponent(AssistantPage);
+    const fixture = TestBed.createComponent(OrganizerPage);
     const store = fixture.componentInstance.chat;
     await store.send('show'); callbacks.table([technique]); callbacks.done(true);
     fixture.detectChanges();

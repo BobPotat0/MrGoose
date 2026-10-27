@@ -4,7 +4,7 @@ namespace MrGoose.Backend.Services;
 
 public record EncodingTransform(string Key, string Name, string Category);
 
-/// <summary>Payload encoders for the Prompt Library + Find Break + the Mr Goose Agent. Ported from the
+/// <summary>Payload encoders for the Prompt Library + Find Break + the Mr Goose Organizer. Ported from the
 /// TENEBRIS encoding catalog: encodings, ciphers, leet/obfuscation, Unicode styles, homoglyphs, misc and
 /// 2026-era smuggling. Chainable (Apply) and span-scoped (ApplyMarked: only [ENC]…[/ENC] is encoded).</summary>
 public static class Encoders
