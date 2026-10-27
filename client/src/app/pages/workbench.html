@@ -1,0 +1,941 @@
+<section class="page workbench-page">
+  <header class="page-head workbench-head">
+    <span class="label-mono">Workspace / Workbench</span>
+    <h1>Break Workbench</h1>
+    <p class="sub">Explore the field, capture recon and prepare your next attempt.</p>
+  </header>
+  <div class="workbench-nav">
+    <nav class="view-tabs" aria-label="Workbench views">
+      <button
+        [class.active]="tab() === 'overview'"
+        [attr.aria-pressed]="tab() === 'overview'"
+        (click)="tab.set('overview')"
+      >
+        Overview
+      </button>
+      <button
+        [class.active]="tab() === 'analyze'"
+        [attr.aria-pressed]="tab() === 'analyze'"
+        (click)="tab.set('analyze')"
+      >
+        Recon
+      </button>
+      <button
+        [class.active]="tab() === 'attack'"
+        [attr.aria-pressed]="tab() === 'attack'"
+        (click)="tab.set('attack')"
+      >
+        Find Break
+      </button>
+    </nav>
+    @if (tab() !== 'overview') {
+      <div class="context-pickers">
+        <label
+          >Scenario<select class="input" [(ngModel)]="scenarioCode" (ngModelChange)="onSelect()">
+            @for (s of scenarios(); track s.code) {
+              <option [value]="s.code">{{ s.code }} — {{ s.name }}</option>
+            }
+          </select></label
+        >
+        <label
+          >Model<select class="input" [(ngModel)]="modelName" (ngModelChange)="onSelect()">
+            @for (m of models(); track m.id) {
+              <option [value]="m.name">{{ m.name }}</option>
+            }
+          </select></label
+        >
+      </div>
+    }
+  </div>
+
+  <!-- ───────── OVERVIEW ───────── -->
+  @if (tab() === 'overview') {
+    <div class="overview-context">
+      <label class="challenge-picker"
+        >Current challenge<select
+          class="input"
+          [ngModel]="slug"
+          (ngModelChange)="onChallenge($event)"
+        >
+          @for (c of challengeList(); track c.slug) {
+            <option [value]="c.slug">{{ c.name }} ({{ c.scenarios }})</option>
+          }
+        </select></label
+      >
+      <div class="field-summary">
+        <strong>{{ models().length }}</strong> models <span>·</span>
+        <strong>{{ ipiScenarios().length }}</strong> IPI scenarios
+      </div>
+      <details class="import-panel">
+        <summary class="btn">Import page source</summary>
+        <div class="import-body">
+          <h2>Refresh from Arena</h2>
+          <p class="dim">
+            Paste the Gray Swan chat page source (View Source / Ctrl+U) to refresh your randomized
+            model names, break matrix and scenario descriptions.
+          </p>
+          <label class="field"
+            >Page source<textarea
+              class="textarea"
+              [(ngModel)]="pageSrc"
+              placeholder="Paste the full chat page source…"
+            ></textarea>
+          </label>
+          <div class="row">
+            <button
+              class="btn primary"
+              (click)="importPage()"
+              [disabled]="!pageSrc.trim() || importing()"
+            >
+              {{ importing() ? 'Importing…' : 'Import page source' }}
+            </button>
+            @if (importStatus()) {
+              <span class="dim" role="status">{{ importStatus() }}</span>
+            }
+          </div>
+        </div>
+      </details>
+    </div>
+    @if (detail(); as d) {
+      <!-- single break matrix: all models by global breaks, with your breaks + manual wave assignment -->
+      <div class="card matrix-card">
+        <div class="row spread matrix-title">
+          <div>
+            <h2>Break matrix</h2>
+            <p class="dim">Select a cell to open that model × scenario in Find Break.</p>
+          </div>
+          <span class="row"
+            ><span class="label-mono" style="margin-right: 6px">wave</span>
+            <select
+              class="input"
+              style="max-width: 150px"
+              [ngModel]="waveFilter()"
+              (ngModelChange)="waveFilter.set($event)"
+            >
+              <option value="all">all</option>
+              <option value="1">Wave 1</option>
+              <option value="2">Wave 2</option>
+              <option value="3">Wave 3</option>
+              <option value="">unassigned</option>
+            </select>
+          </span>
+        </div>
+        <div class="matrix-scroll">
+          <table class="matrix">
+            <thead>
+              <tr>
+                <th class="left" style="cursor: pointer" (click)="sortBy('model')">
+                  model {{ sortArrow('model') }}
+                </th>
+                <th
+                  style="cursor: pointer"
+                  title="global field breaks (all operators, from page source)"
+                  (click)="sortBy('field')"
+                >
+                  field brk {{ sortArrow('field') }}
+                </th>
+                <th style="cursor: pointer" title="your recorded breaks" (click)="sortBy('my')">
+                  my brk {{ sortArrow('my') }}
+                </th>
+                <th style="cursor: pointer" (click)="sortBy('wave')">
+                  wave {{ sortArrow('wave') }}
+                </th>
+                @for (s of ipiScenarios(); track s.code) {
+                  <th [title]="s.name" style="cursor: pointer" (click)="sortBy(s.code)">
+                    {{ s.code }} {{ sortArrow(s.code) }}
+                  </th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of rows(); track m.id) {
+                <tr>
+                  <td class="left">{{ m.name }}</td>
+                  <td class="dim" style="text-align: right">{{ m.fieldBreaks }}</td>
+                  <td style="text-align: right; color: var(--lime); font-weight: 600">
+                    {{ myBreaks(m) }}
+                  </td>
+                  <td>
+                    <select
+                      class="input"
+                      style="height: 22px; font-size: 11px; padding: 0 4px"
+                      [ngModel]="m.wave"
+                      (ngModelChange)="setModelWave(m, $event)"
+                    >
+                      <option value="">—</option>
+                      <option value="1">W1</option>
+                      <option value="2">W2</option>
+                      <option value="3">W3</option>
+                    </select>
+                  </td>
+                  @for (s of ipiScenarios(); track s.code) {
+                    <td
+                      class="cell"
+                      role="button"
+                      tabindex="0"
+                      (keydown.enter)="openAttack(m.name, s.code)"
+                      (keydown.space)="$event.preventDefault(); openAttack(m.name, s.code)"
+                      [attr.aria-label]="m.name + ' × ' + s.code + ' · ' + verdictOf(m, s.code)"
+                      [class]="'v-' + verdictOf(m, s.code)"
+                      (click)="openAttack(m.name, s.code)"
+                      [title]="m.name + ' × ' + s.code + ' — open in Find Break'"
+                    >
+                      {{ sym(verdictOf(m, s.code)) }}
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="legend">
+          <span><i class="v-break"></i> break</span><span><i class="v-wall"></i> wall</span>
+          <span><i class="v-partial"></i> partial</span
+          ><span><i class="v-untested"></i> untested</span>
+          <span class="muted" style="margin-left: 10px"
+            >click a header to sort · field brk = global · my brk = yours · set wave per row</span
+          >
+        </div>
+      </div>
+
+      <!-- per-wave tables of the models you assigned -->
+      @for (w of assignedWaves(); track w) {
+        <div class="card" style="margin-bottom: 12px">
+          <div class="row spread" style="margin-bottom: 10px">
+            <span class="label-mono"
+              >Wave {{ w }} — assigned models ({{ modelsOfWave(w).length }})</span
+            >
+          </div>
+          <div class="matrix-scroll">
+            <table class="matrix">
+              <thead>
+                <tr>
+                  <th class="left">model</th>
+                  <th>field brk</th>
+                  <th>my brk</th>
+                  <th>wave</th>
+                  @for (s of ipiScenarios(); track s.code) {
+                    <th [title]="s.name">{{ s.code }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (m of modelsOfWave(w); track m.id) {
+                  <tr>
+                    <td class="left">{{ m.name }}</td>
+                    <td class="dim" style="text-align: right">{{ m.fieldBreaks }}</td>
+                    <td style="text-align: right; color: var(--lime); font-weight: 600">
+                      {{ myBreaks(m) }}
+                    </td>
+                    <td>
+                      <select
+                        class="input"
+                        style="height: 22px; font-size: 11px; padding: 0 4px"
+                        [ngModel]="m.wave"
+                        (ngModelChange)="setModelWave(m, $event)"
+                      >
+                        <option value="">—</option>
+                        <option value="1">W1</option>
+                        <option value="2">W2</option>
+                        <option value="3">W3</option>
+                      </select>
+                    </td>
+                    @for (s of ipiScenarios(); track s.code) {
+                      <td
+                        class="cell"
+                        role="button"
+                        tabindex="0"
+                        (keydown.enter)="openAttack(m.name, s.code)"
+                        (keydown.space)="$event.preventDefault(); openAttack(m.name, s.code)"
+                        [attr.aria-label]="m.name + ' × ' + s.code + ' · ' + verdictOf(m, s.code)"
+                        [class]="'v-' + verdictOf(m, s.code)"
+                        (click)="openAttack(m.name, s.code)"
+                        [title]="m.name + ' × ' + s.code + ' — open in Find Break'"
+                      >
+                        {{ sym(verdictOf(m, s.code)) }}
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+      <h2 style="font-size: 15px; margin: 18px 0 8px">Scenario register</h2>
+      @for (s of ipiScenarios(); track s.code) {
+        <div class="card alt">
+          <button
+            class="scenario-toggle row spread"
+            [attr.aria-expanded]="open().has(s.code)"
+            (click)="toggle(s.code)"
+          >
+            <div class="row">
+              <span class="chip lime">{{ s.code }}</span
+              ><strong>{{ s.name }}</strong>
+            </div>
+            <span class="dim"
+              >{{ s.breaksDone }}/{{ s.breaksTotal }}
+              <span aria-hidden="true">{{ open().has(s.code) ? '−' : '+' }}</span></span
+            >
+          </button>
+          @if (open().has(s.code)) {
+            <div style="margin-top: 10px; display: grid; gap: 8px">
+              <div>
+                <span class="label-mono">objective</span>
+                <p class="dim">{{ s.objective }}</p>
+              </div>
+              @if (s.benignTask) {
+                <div>
+                  <span class="label-mono">benign task</span>
+                  <p class="dim">{{ s.benignTask }}</p>
+                </div>
+              }
+              @if (s.criteria) {
+                <div>
+                  <span class="label-mono">criteria</span>
+                  <p class="dim">{{ s.criteria }}</p>
+                </div>
+              }
+              @for (f of s.surfaces; track f.key) {
+                <div class="mono dim" style="font-size: 12px">
+                  {{ f.required ? '★ ' : '• ' }}{{ f.key }} — {{ f.fieldsCsv }}
+                </div>
+              }
+              @if (s.markers.length) {
+                <div class="mono dim" style="font-size: 12px">{{ markerStr(s) }}</div>
+              }
+            </div>
+          }
+        </div>
+      }
+    } @else {
+      <p class="dim">Loading…</p>
+    }
+  }
+
+  <!-- ───────── RECON (dossier dashboard, TENEBRIS Analyze layout) ───────── -->
+  @if (tab() === 'analyze') {
+    @if (dossier(); as d) {
+      <div class="card">
+        <div class="row spread">
+          <div>
+            <span class="label-mono" style="color: var(--lime)">{{ modelName }}</span>
+            <span class="mono dim" style="font-size: 12px">× {{ scenarioCode }}</span>
+          </div>
+          <button class="btn" (click)="onSelect()">↻ refresh</button>
+        </div>
+        <div class="recon-meta">
+          <label class="field"
+            >Scaffold / harness<input
+              class="input"
+              [(ngModel)]="scaffold"
+              placeholder="Scaffold / harness"
+          /></label>
+          <label class="field"
+            >Tool namespace<input class="input" [(ngModel)]="toolNs" placeholder="Tool namespace"
+          /></label>
+          <label class="row"><input type="checkbox" [(ngModel)]="browser" /> Browser</label
+          ><button class="btn" (click)="saveMeta()">Save metadata</button>
+        </div>
+        <details class="fact-entry">
+          <summary>Add a filter, gate or system tag</summary>
+          <div class="row">
+            <select class="input fact-kind" aria-label="Fact type" [(ngModel)]="factKind">
+              <option value="filter">Filter</option>
+              <option value="gate">Gate</option>
+              <option value="system_tag">System tag</option>
+            </select>
+            <input
+              class="input grow"
+              aria-label="Fact name"
+              [(ngModel)]="factName"
+              placeholder="Name"
+            /><input
+              class="input grow"
+              aria-label="Fact detail"
+              [(ngModel)]="factDetail"
+              placeholder="Detail"
+            /><button class="btn" (click)="addFact()" [disabled]="!factName.trim()">
+              Add fact
+            </button>
+          </div>
+        </details>
+      </div>
+
+      <div class="rgrid recon-grid">
+        <!-- col 1: tools & call syntax -->
+        <div class="card alt">
+          <h2>
+            Tools &amp; call syntax <span class="section-count">{{ d.tools.length }}</span>
+          </h2>
+          @for (t of d.tools; track t.id) {
+            <div class="card" style="margin-top: 8px; padding: 10px">
+              <div class="row spread">
+                <span class="mono" style="font-size: 12.5px; color: var(--lime)">{{ t.name }}</span
+                ><button
+                  class="remove-item"
+                  aria-label="Delete captured item"
+                  (click)="delTool(t.id)"
+                >
+                  ✕
+                </button>
+              </div>
+              @if (t.notation) {
+                <pre class="mono dim" style="white-space: pre-wrap; margin: 6px 0 0">{{
+                  t.notation
+                }}</pre>
+              }
+              @if (t.resultFormat) {
+                <div style="margin-top: 6px">
+                  <span class="muted" style="">result shape</span>
+                  <pre class="mono dim" style="white-space: pre-wrap; margin: 2px 0 0">{{
+                    t.resultFormat
+                  }}</pre>
+                </div>
+              }
+              @if (t.note) {
+                <p class="dim" style="margin: 6px 0 0">{{ t.note }}</p>
+              }
+              @for (c of t.calls; track c.id) {
+                <div class="mono dim" style="margin-top: 4px">
+                  ↳ {{ short(c.args) }} ⇒ {{ short(c.result) }}
+                </div>
+              }
+            </div>
+          }
+          @if (!d.tools.length) {
+            <p class="muted" style="margin-top: 8px">
+              Nothing captured yet — paste a victim run into Find Break; the crafter records tools
+              here.
+            </p>
+          }
+        </div>
+
+        <!-- col 2: hard filters + gates -->
+        <div>
+          <div class="card alt">
+            <h2>
+              Hard filters <span class="section-count">{{ factsOf(d, 'filter').length }}</span>
+            </h2>
+            @for (f of factsOf(d, 'filter'); track f.id) {
+              <div class="card" style="margin-top: 6px; padding: 8px">
+                <div class="row spread">
+                  <span class="mono" style="font-size: 12px">{{ f.name }}</span
+                  ><button
+                    class="remove-item"
+                    aria-label="Delete captured item"
+                    (click)="delFact(f.id)"
+                  >
+                    ✕
+                  </button>
+                </div>
+                @if (f.detail) {
+                  <p class="dim" style="margin: 3px 0 0">{{ f.detail }}</p>
+                }
+              </div>
+            }
+            @if (!factsOf(d, 'filter').length) {
+              <p class="muted" style="margin-top: 6px">none captured</p>
+            }
+          </div>
+          <div class="card alt" style="margin-top: 12px">
+            <h2>
+              Gates <span class="section-count">{{ factsOf(d, 'gate').length }}</span>
+            </h2>
+            @for (f of factsOf(d, 'gate'); track f.id) {
+              <div class="card" style="margin-top: 6px; padding: 8px">
+                <div class="row spread">
+                  <span class="mono" style="font-size: 12px">{{ f.name }}</span
+                  ><button
+                    class="remove-item"
+                    aria-label="Delete captured item"
+                    (click)="delFact(f.id)"
+                  >
+                    ✕
+                  </button>
+                </div>
+                @if (f.detail) {
+                  <p class="dim" style="margin: 3px 0 0">{{ f.detail }}</p>
+                }
+              </div>
+            }
+            @if (!factsOf(d, 'gate').length) {
+              <p class="muted" style="margin-top: 6px">none captured</p>
+            }
+          </div>
+        </div>
+
+        <!-- col 3: system tags + scenario recon -->
+        <div>
+          <div class="card alt">
+            <h2>
+              System / template tags
+              <span class="section-count">{{ factsOf(d, 'system_tag').length }}</span>
+            </h2>
+            @for (f of factsOf(d, 'system_tag'); track f.id) {
+              <div class="card" style="margin-top: 6px; padding: 8px">
+                <div class="row spread">
+                  <span class="mono" style="font-size: 12px">{{ f.name }}</span
+                  ><button
+                    class="remove-item"
+                    aria-label="Delete captured item"
+                    (click)="delFact(f.id)"
+                  >
+                    ✕
+                  </button>
+                </div>
+                @if (f.detail) {
+                  <p class="dim" style="margin: 3px 0 0">{{ f.detail }}</p>
+                }
+              </div>
+            }
+            @if (!factsOf(d, 'system_tag').length) {
+              <p class="muted" style="margin-top: 6px">none captured</p>
+            }
+          </div>
+          <div class="card alt" style="margin-top: 12px">
+            <h2>
+              Scenario recon <span class="section-count">{{ reconNotes().length }}</span>
+            </h2>
+            <p class="dim recon-caption">Ground-truth observations</p>
+            <div class="row" style="margin-top: 6px">
+              <input
+                class="input"
+                style="max-width: 100px"
+                [(ngModel)]="reconCat"
+                placeholder="tag"
+              /><input class="input grow" [(ngModel)]="reconText" placeholder="a fact…" /><button
+                class="btn"
+                (click)="addReconNote()"
+                [disabled]="!reconText.trim()"
+              >
+                +
+              </button>
+            </div>
+            @for (n of reconNotes(); track n.id) {
+              <div class="card" style="margin-top: 6px; padding: 8px">
+                <div class="row spread">
+                  <span style="font-size: 12px">
+                    @if (n.category) {
+                      <span class="chip">{{ n.category }}</span>
+                    }
+                    {{ n.text }}</span
+                  ><button
+                    class="remove-item"
+                    aria-label="Delete captured item"
+                    (click)="delReconNote(n.id)"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            }
+            @if (!reconNotes().length) {
+              <p class="muted" style="margin-top: 6px">no facts for this scenario yet</p>
+            }
+          </div>
+        </div>
+      </div>
+    } @else {
+      <p class="dim">select a model × scenario…</p>
+    }
+  }
+
+  <!-- ───────── FIND BREAK (arena left · craft agent right) ───────── -->
+  @if (tab() === 'attack') {
+    <div class="flow-bar">
+      <div class="stepper">
+        @for (s of attackSteps; track s; let i = $index) {
+          <button
+            class="step"
+            [class.active]="aStep() === s"
+            [class.done]="aIdx(aStep()) > i"
+            [class.todo]="aIdx(aStep()) < i"
+            (click)="aRun(s)"
+          >
+            <span class="n">{{ i + 1 }}</span
+            >{{ aLabel(s) }}
+          </button>
+          @if (i < 4) {
+            <span class="step-sep">→</span>
+          }
+        }
+      </div>
+    </div>
+
+    <div class="workspace attack-workspace" #ws>
+      <!-- LEFT: embedded arena (resizable via the splitter) -->
+      <div class="pane arena-panel" [style.flexBasis.%]="arenaPct()">
+        <mg-arena-pane (picked)="onPick($event)"></mg-arena-pane>
+      </div>
+      <div class="splitter" (mousedown)="startDrag($event)" title="drag to resize the arena"></div>
+
+      <!-- RIGHT: craft agent -->
+      <div class="pane scroll craft-panel">
+        <div class="card source-card">
+          <div class="row spread">
+            <h2>Craft context</h2>
+            <span class="dim context-hint">Choose your sources</span>
+          </div>
+          <div class="source-grid">
+            <button
+              class="btn"
+              (click)="openOverlay('breaks')"
+              title="Break from prompt library as reference"
+            >
+              Reference prompts <span>{{ selBreaks().size }}</span>
+            </button>
+            <button class="btn" (click)="openOverlay('blocks')">
+              Building blocks <span>{{ selBlocks().size }}</span>
+            </button>
+            <button class="btn" (click)="openOverlay('techs')">
+              Techniques <span>{{ selTechs().size }}</span>
+            </button>
+            <button class="btn" (click)="openOverlay('tools')">
+              Tool calls / forge <span>{{ dossier()?.tools?.length || 0 }}</span>
+            </button>
+            <button class="btn" (click)="openOverlay('markers')">
+              Markers <span>{{ markers().length }}</span>
+            </button>
+            <button class="btn" (click)="openPrompt()">System prompt ↗</button>
+          </div>
+          <label class="recon-option"
+            ><input type="checkbox" [(ngModel)]="includeRecon" /> Include scenario recon</label
+          >
+        </div>
+        <div class="card craft-transcript" aria-label="Craft conversation">
+          @for (v of view(); track $index) {
+            @if (v.type === 'tool') {
+              <div class="mono" style="font-size: 11px; color: var(--amber); margin: 4px 0">
+                ⚙ {{ v.text }}
+              </div>
+            } @else if (v.type === 'user') {
+              <div style="margin-bottom: 10px">
+                <span class="label-mono" style="color: var(--lime)">user</span>
+                <pre
+                  class="mono"
+                  style="
+                    white-space: pre-wrap;
+                    font-size: 13px;
+                    line-height: 1.5;
+                    margin-top: 4px;
+                    color: var(--text);
+                  "
+                  >{{ v.text }}</pre>
+              </div>
+            } @else {
+              <div style="margin-bottom: 10px">
+                <div class="label-mono" style="color: var(--text-mute)">assistant</div>
+                @if (v.reasoning) {
+                  <div
+                    class="label-mono"
+                    style="color: var(--amber); cursor: pointer; margin-top: 4px"
+                    (click)="toggleReasoning($index)"
+                  >
+                    {{ v.reasoningOpen ? '▾' : '▸' }} reasoning
+                  </div>
+                  @if (v.reasoningOpen) {
+                    <pre
+                      class="mono dim"
+                      style="
+                        white-space: pre-wrap;
+                        font-size: 11.5px;
+                        line-height: 1.45;
+                        border-left: 2px solid var(--surface-3);
+                        padding-left: 8px;
+                        margin: 4px 0 8px;
+                      "
+                      >{{ v.reasoning }}</pre>
+                  }
+                }
+                <pre
+                  class="mono"
+                  style="
+                    white-space: pre-wrap;
+                    font-size: 13px;
+                    line-height: 1.5;
+                    margin-top: 4px;
+                    color: var(--text);
+                  "
+                  >{{ v.text }}</pre>
+              </div>
+            }
+          }
+          @if (!view().length) {
+            <p class="dim">
+              Paste a victim run for analysis, or describe what you want to refine. Use the controls
+              below to fill, read back and record the result.
+            </p>
+          }
+        </div>
+
+        <div class="card craft-controls">
+          <label class="field"
+            >Message the crafter<textarea
+              class="textarea"
+              [(ngModel)]="input"
+              (keydown.control.enter)="send()"
+              placeholder="Craft request, feedback or a victim run… (Ctrl+Enter)"
+            ></textarea>
+          </label>
+          <div class="row compose-actions">
+            <span class="dim">Ctrl+Enter to send</span><span class="grow"></span
+            ><button class="btn primary" (click)="send()" [disabled]="streaming() || !input.trim()">
+              {{ streaming() ? 'Crafting…' : 'Send' }}
+            </button>
+          </div>
+          <div class="payload-actions">
+            <span class="label-mono">Payload</span
+            ><button
+              class="btn"
+              [class.primary]="encKeys().length > 0 || encMarked"
+              (click)="openOverlay('enc')"
+              title="Encode payload before filling"
+            >
+              Encode ({{ encKeys().length }}{{ encMarked ? ', [ENC]' : '' }})</button
+            ><button class="btn" (click)="fillIntoTab()" [disabled]="!arena.available">
+              Fill →</button
+            ><button class="btn" (click)="readBack()" [disabled]="!arena.available">
+              Read back</button
+            ><button class="btn" (click)="judge()">Judge</button>
+          </div>
+          <details class="target-details">
+            <summary>
+              Fill target <span class="mono">{{ fillSel || 'Choose an element' }}</span>
+            </summary>
+            <label class="field"
+              >Pick an element in Arena, or enter a CSS selector<input
+                class="input"
+                [(ngModel)]="fillSel"
+                placeholder="#chatTextarea"
+            /></label>
+          </details>
+          <div class="record-actions">
+            <span class="label-mono">Record verdict</span>
+            <div class="row">
+              <button class="btn verdict-break" (click)="record('break')">Break</button
+              ><button class="btn" (click)="record('wall')">Wall</button
+              ><button class="btn" (click)="record('partial')">Partial</button>
+            </div>
+          </div>
+          <p class="dossier-summary">
+            {{ factCount('filter') }} filters · {{ factCount('gate') }} gates ·
+            {{ factCount('system_tag') }} tags · {{ dossier()?.tools?.length || 0 }} tools ·
+            {{ dossier()?.injections?.length || 0 }} injections
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ modal overlays (windows) — arena view is hidden behind them ═══ -->
+    @if (overlay()) {
+      <div class="overlay-back" (click)="closeOverlay()">
+        <div
+          class="card tool-dialog"
+          role="dialog"
+          aria-modal="true"
+          [attr.aria-label]="overlayTitle()"
+          style="width: min(720px, 92vw); max-height: 84vh; overflow: auto"
+          (click)="$event.stopPropagation()"
+        >
+          <div class="row spread" style="margin-bottom: 10px">
+            <span class="label-mono">{{ overlayTitle() }}</span
+            ><button class="btn" (click)="closeOverlay()">close</button>
+          </div>
+
+          @if (overlay() === 'breaks') {
+            <p class="muted" style="font-size: 11px">
+              Prompts from your library, patched in as reference breaks (the move — not copied
+              verbatim; markers stay literal). Break-verdict first.
+            </p>
+            <input
+              class="input"
+              style="margin-top: 8px"
+              [(ngModel)]="breakSearch"
+              placeholder="search title / tags…"
+            />
+            @for (p of filteredBreakRefs(); track p.id) {
+              <label class="row" style="gap: 8px; margin-top: 7px; align-items: flex-start"
+                ><input
+                  type="checkbox"
+                  [checked]="selBreaks().has('prompt:' + p.id)"
+                  (change)="pick(selBreaks, 'prompt:' + p.id)"
+                />
+                <span
+                  ><span class="chip" [class.lime]="p.verdict === 'break'">{{ p.verdict }}</span>
+                  <strong style="font-size: 12.5px">{{ p.title }}</strong>
+                  @if (p.tags) {
+                    <span class="mono dim" style="font-size: 11px"> · {{ p.tags }}</span>
+                  }
+                </span></label
+              >
+            }
+            @if (!filteredBreakRefs().length) {
+              <p class="muted" style="font-size: 12px; margin-top: 8px">
+                No matching prompts. Save winning payloads in the Prompt Library first.
+              </p>
+            }
+          }
+
+          @if (overlay() === 'blocks') {
+            @for (b of blocks(); track b.id) {
+              <label class="row" style="gap: 8px; margin-top: 7px"
+                ><input
+                  type="checkbox"
+                  [checked]="selBlocks().has(b.id)"
+                  (change)="pick(selBlocks, b.id)"
+                />
+                <span class="chip">{{ b.type }}</span
+                ><span class="dim" style="font-size: 12px">{{ b.content }}</span></label
+              >
+            }
+            @if (!blocks().length) {
+              <p class="muted" style="font-size: 12px">no building blocks</p>
+            }
+          }
+
+          @if (overlay() === 'techs') {
+            @for (t of techniques(); track t.id) {
+              <label class="row" style="gap: 8px; margin-top: 7px; align-items: flex-start"
+                ><input
+                  type="checkbox"
+                  [checked]="selTechs().has(t.id)"
+                  (change)="pick(selTechs, t.id)"
+                />
+                <span
+                  ><strong style="font-size: 12.5px">{{ t.title }}</strong>
+                  @if (t.tags) {
+                    <span class="mono dim" style="font-size: 11px"> · {{ t.tags }}</span>
+                  }
+                  @if (t.summary) {
+                    <p class="dim" style="font-size: 11px; margin: 2px 0 0">{{ t.summary }}</p>
+                  }
+                </span></label
+              >
+            }
+          }
+
+          @if (overlay() === 'tools') {
+            <p class="muted" style="font-size: 11px">
+              Captured victim tools — insert a call notation into the message, or forge a
+              tool-result block.
+            </p>
+            @for (t of dossier()?.tools ?? []; track t.id) {
+              <div class="card" style="margin-top: 8px; padding: 10px">
+                <div class="row spread">
+                  <span class="mono" style="font-size: 12.5px; color: var(--lime)">{{
+                    t.name
+                  }}</span>
+                  <div class="row">
+                    <button
+                      class="btn"
+                      style="height: 22px; padding: 2px 8px"
+                      (click)="insertToolCall(t.notation || t.name)"
+                    >
+                      insert call</button
+                    ><button
+                      class="btn"
+                      style="height: 22px; padding: 2px 8px"
+                      (click)="forgeResult(t.name)"
+                    >
+                      forge result
+                    </button>
+                  </div>
+                </div>
+                @if (t.notation) {
+                  <pre
+                    class="mono dim"
+                    style="white-space: pre-wrap; font-size: 11px; margin: 4px 0 0"
+                    >{{ t.notation }}</pre>
+                }
+                @for (c of t.calls; track c.id) {
+                  <div class="mono dim" style="font-size: 11px; margin-top: 2px">
+                    ↳ {{ short(c.args) }} ⇒ {{ short(c.result) }}
+                  </div>
+                }
+              </div>
+            }
+            @if (!dossier()?.tools?.length) {
+              <p class="muted" style="font-size: 12px; margin-top: 8px">
+                no tools captured — paste a victim run into the crafter to record them.
+              </p>
+            }
+          }
+
+          @if (overlay() === 'markers') {
+            <div class="row" style="flex-wrap: wrap; gap: 6px">
+              @for (m of markers(); track m.token) {
+                <span class="chip" style="cursor: pointer" (click)="insert(m.token)"
+                  >{{ m.token }}
+                  <a (click)="removeMarker(m.token); $event.stopPropagation()">✕</a></span
+                >
+              }
+            </div>
+            <div class="row" style="margin-top: 8px">
+              <input
+                class="input grow"
+                [(ngModel)]="newMarker"
+                placeholder="{{ '{{owner.email}}' }}"
+              /><button class="btn" (click)="addMarker()" [disabled]="!newMarker.trim()">
+                add
+              </button>
+            </div>
+            <p class="muted" style="font-size: 11px; margin-top: 6px">
+              Click a marker to insert it into the message. The harness substitutes the real value
+              at submission.
+            </p>
+          }
+
+          @if (overlay() === 'prompt') {
+            <div class="row" style="margin-bottom: 8px">
+              <button class="btn" (click)="resyncPrompt()">↻ re-sync from selection</button
+              ><span class="muted" style="font-size: 11px; margin-left: 8px"
+                >edited text is used on send</span
+              >
+            </div>
+            <textarea
+              class="textarea"
+              style="min-height: 300px"
+              [(ngModel)]="promptDraft"
+            ></textarea>
+          }
+
+          @if (overlay() === 'enc') {
+            <div class="row spread">
+              <span class="muted" style="font-size: 11px">applied to the payload on fill →</span
+              ><label class="row" style="gap: 6px; font-size: 12px"
+                ><input type="checkbox" [(ngModel)]="encMarked" /> only [ENC]…[/ENC] spans</label
+              >
+            </div>
+            @for (cat of encCategories(); track cat) {
+              <div style="margin-top: 8px">
+                <span class="muted mono" style="font-size: 10.5px">{{ cat }}</span>
+                <div class="row" style="flex-wrap: wrap; gap: 5px; margin-top: 4px">
+                  @for (t of encByCat(cat); track t.key) {
+                    <span
+                      class="chip"
+                      style="cursor: pointer"
+                      [class.lime]="encKeys().includes(t.key)"
+                      (click)="toggleEnc(t.key)"
+                      [title]="t.key"
+                      >{{ t.name }}</span
+                    >
+                  }
+                </div>
+              </div>
+            }
+            <div class="row" style="margin-top: 10px">
+              <span class="muted" style="font-size: 11px"
+                >chain: {{ encKeys().length ? encKeys().join(' → ') : '(none)' }}</span
+              ><span class="grow"></span
+              ><button class="btn" (click)="encKeys.set([])" [disabled]="!encKeys().length">
+                clear
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  }
+</section>
