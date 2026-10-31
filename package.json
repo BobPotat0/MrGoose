@@ -11,16 +11,23 @@
     "build:backend": "dotnet build backend/MrGoose.Backend.csproj -c Debug",
     "dev:client": "npm --prefix client start",
     "dev:electron": "wait-on http://localhost:4200 && electron electron/main.js",
-    "dev": "npm run build:backend && concurrently -k -n CLIENT,ELECTRON -c green,magenta \"npm:dev:client\" \"npm:dev:electron\""
+    "dev": "npm run build:backend && concurrently -k -n CLIENT,ELECTRON -c green,magenta \"npm:dev:client\" \"npm:dev:electron\"",
+    "dist:win": "node scripts/build-desktop.cjs win x64",
+    "dist:mac": "node scripts/build-desktop.cjs mac",
+    "dist:mac:intel": "node scripts/build-desktop.cjs mac x64"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",
     "concurrently": "^9.1.0",
-    "electron": "^33.2.0",
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0",
     "wait-on": "^8.0.1"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",
+    "electron-updater": "6.8.11",
     "zod": "4.6.7"
-  }
+  },
+  "author": "MrGoose contributors",
+  "license": "UNLICENSED"
 }

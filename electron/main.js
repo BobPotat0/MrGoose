@@ -3,13 +3,17 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const { createStartupController } = require('./startup-controller');
+const { resolveRuntimePaths } = require('./runtime-paths');
 
 // Keep this checkout's profile, arena session and diagnostics together, even when launched elsewhere.
 // Electron requires these directories to exist and sessionData must be set before ready.
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const profilePath = path.join(PROJECT_ROOT, 'data', 'desktop');
-const logsPath = path.join(PROJECT_ROOT, 'data', 'logs');
-const crashPath = path.join(PROJECT_ROOT, 'data', 'crashes');
+if (app.isPackaged) app.setName('MrGoose');
+const runtime = resolveRuntimePaths({ isPackaged: !!app.isPackaged, projectRoot: PROJECT_ROOT,
+  resourcesPath: process.resourcesPath, userDataPath: app.isPackaged ? app.getPath('userData') : null, platform: process.platform, env: process.env });
+const profilePath = runtime.profile;
+const logsPath = runtime.logs;
+const crashPath = runtime.crashes;
 for (const directory of [profilePath, logsPath, crashPath]) fs.mkdirSync(directory, { recursive: true });
 app.setPath('userData', profilePath);
 app.setPath('sessionData', profilePath);
@@ -41,19 +45,23 @@ let arenaWindow = null;
 let sourceWindow = null; // standalone browser window for Source-library links (separate from the arena)
 let cockpitServer = null;
 let cockpitOpening = null;
+let updater = null;
 // The arena browser is embedded in the cockpit by default; it can be detached into its own window.
 let arenaDocked = true;
 let dockedBounds = { x: 0, y: 0, width: 0, height: 0 };
 
 // ───────────────────────── backend sidecar ─────────────────────────
 function backendExePath() {
-  return path.join(__dirname, '..', 'backend', 'bin', 'Debug', 'net10.0', 'MrGoose.Backend.exe');
+  return runtime.backend;
 }
+let keyEncryptionKey;
 function startBackend() {
-  backend = spawn(backendExePath(), ['--urls', BACKEND_URL], { cwd: PROJECT_ROOT, stdio: 'inherit', windowsHide: true, env: { ...process.env, MRGOOSE_CONTROL_TOKEN: backendToken, MRGOOSE_INSTANCE_ID: instanceId, MRGOOSE_RENDERER_ORIGIN: new URL(RENDERER_URL).origin } });
+  backend = spawn(backendExePath(), ['--urls', BACKEND_URL], { cwd: runtime.backendDirectory, stdio: 'inherit', windowsHide: true, env: { ...process.env,
+    MRGOOSE_DB_PATH: runtime.database, MRGOOSE_KEY_ENCRYPTION_KEY: keyEncryptionKey, MRGOOSE_APP_VERSION: app.isPackaged ? app.getVersion() : '',
+    MRGOOSE_CONTROL_TOKEN: backendToken, MRGOOSE_INSTANCE_ID: instanceId, MRGOOSE_RENDERER_ORIGIN: new URL(RENDERER_URL).origin } });
   backend.on('error', (err) =>
     console.error('[mrgoose] backend failed to start:', err.message,
-      '\n  Build it first:  dotnet build backend/MrGoose.Backend.csproj -c Debug'));
+      app.isPackaged ? '\n  Reinstall MrGoose or check its local logs.' : '\n  Build it first: dotnet build backend/MrGoose.Backend.csproj -c Debug'));
   backend.on('exit', (code) => { console.log('[mrgoose] backend exited', code); backend = null; });
 }
 function stopBackend() {
@@ -93,6 +101,10 @@ function registerBridge() {
   handle('mrgoose:arena:state', () => ({ docked: arenaDocked }));
   // Source-library links open in their OWN standalone browser window, never embedded and never the arena.
   handle('mrgoose:open-url', ({ url }) => openSourceUrl(url));
+  handle('mrgoose:app:info', () => ({ version: app.getVersion(), packaged: app.isPackaged, updates: updater?.status() }));
+  handle('mrgoose:update:check', () => updater?.check());
+  handle('mrgoose:update:download', () => updater?.download());
+  handle('mrgoose:update:install', () => updater?.install());
   for (const [channel, operation] of Object.entries({ fillField: 'fill', readDom: 'read', snapshotConversation: 'snapshot', highlightSendButton: 'highlight', pickElement: 'pick' })) {
     handle('mrgoose:' + channel, async ({ tabId, selector, value }) => {
       try {
@@ -108,8 +120,8 @@ function registerBridge() {
 async function startControl() {
   if (control) return;
   const { LocalControl } = require('./local-control');
-  const candidate = new LocalControl({ directory: path.join(PROJECT_ROOT, 'data', 'mcp'), browser: arena,
-    runtimePath: process.execPath, adapterPath: path.join(PROJECT_ROOT, 'mcp', 'server.cjs'),
+  const candidate = new LocalControl({ directory: runtime.mcp, browser: arena,
+    runtimePath: process.execPath, adapterPath: runtime.adapter,
     hide: hideArena,
     present: presentArena,
     data: async (operation, args) => {
@@ -121,7 +133,7 @@ async function startControl() {
     } });
   await candidate.start();
   const { Tray, Menu } = require('electron');
-  tray = new Tray(path.join(__dirname, 'icon.ico'));
+  tray = new Tray(path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'));
   tray.setToolTip('MrGoose — running');
   const show = () => { void showCockpit().catch(error => console.error('[mrgoose] workspace:', error.message)); };
   tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Show workspace', click: show }, { label: 'Show Arena', click: () => arenaWindow.show() }, { label: 'Hide Arena', click: () => arenaWindow.hide() }, { type: 'separator' }, { label: 'Quit MrGoose', click: () => app.quit() }]));
@@ -231,14 +243,19 @@ app.whenReady().then(async () => {
   app.on('second-instance', (_event, argv) => { if (argv.includes('--arena-only')) { if (arenaWindow?.window) arenaWindow.show(); } else void showCockpit().catch(error => console.error(error.message)); });
   if (process.platform === 'win32') app.setAppUserModelId('com.mrgoose.cockpit');
   registerBridge();
-  if (!process.env.MRGOOSE_RENDERER_URL) {
+  if (app.isPackaged || !process.env.MRGOOSE_RENDERER_URL) {
     const { startCockpitServer } = require('./cockpit-server');
-    cockpitServer = await startCockpitServer(path.join(PROJECT_ROOT, 'client', 'dist', 'client', 'browser'));
+    cockpitServer = await startCockpitServer(runtime.client, { port: Number(process.env.MRGOOSE_RENDERER_PORT || 5175) });
+    if (app.isPackaged && !cockpitServer) throw new Error('The installed workspace is missing. Reinstall MrGoose.');
     if (cockpitServer) RENDERER_URL = cockpitServer.url;
   }
   startup = createStartupController({ app, BrowserWindow, ipcMain, directory: __dirname });
   await startup.open(async report => {
     report('service');
+    if (process.platform !== 'win32' && !keyEncryptionKey) {
+      const { prepareKeyEncryption } = require('./secure-key');
+      keyEncryptionKey = await prepareKeyEncryption(runtime.data, require('electron').safeStorage);
+    }
     if (!backend) startBackend();
     const healthy = await waitForHealth();
     if (quitting) return null;
@@ -246,6 +263,10 @@ app.whenReady().then(async () => {
     report('workspace');
     if (!arenaWindow.window) await arenaWindow.create();
     await startControl();
+    const { createUpdater } = require('./updates');
+    updater ||= createUpdater({ app, ipcMain, getWindow: () => mainWindow, beforeInstall: async () => {
+      quitting = true; await control?.stop(); stopBackend();
+    } });
     if (process.argv.includes('--arena-only')) return arenaWindow.window;
     // Normal app launches always open the workspace. The hidden Arena host is shown
     // only by an explicit arena request (for example arena_open_tab/attempt_present).

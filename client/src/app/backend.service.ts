@@ -7,6 +7,7 @@ type Health = 'checking' | 'ok' | 'down';
 type Hub = 'disconnected' | 'connecting' | 'connected';
 
 export interface ChatMsg { role: 'user' | 'assistant' | 'system'; content: string; }
+export interface OrganizerOpen { kind: string; id: string; sessionId?: string; }
 
 /** Owns the REST base + the SignalR connection to the C# sidecar; exposes state as signals. */
 @Injectable({ providedIn: 'root' })
@@ -21,11 +22,12 @@ export class BackendService {
 
   private connection?: signalR.HubConnection;
   private started = false;
+  private finishAttacker?: () => void;
   private pageActionHandler?: (a: { id: string; name: string; args: string }) => void;
   // Persistent inspector push: the in-app agent and MCP both emit organizerOpen/organizerChanged.
-  private openHandlers: Array<(i: { kind: string; id: string }) => void> = [];
+  private openHandlers: Array<(i: OrganizerOpen) => void> = [];
   private changeHandlers: Array<(i: { kind: string; id: string }) => void> = [];
-  onOrganizerOpen(cb: (i: { kind: string; id: string }) => void) { this.openHandlers.push(cb); return () => { this.openHandlers = this.openHandlers.filter(h => h !== cb); }; }
+  onOrganizerOpen(cb: (i: OrganizerOpen) => void) { this.openHandlers.push(cb); return () => { this.openHandlers = this.openHandlers.filter(h => h !== cb); }; }
   onOrganizerChanged(cb: (i: { kind: string; id: string }) => void) { this.changeHandlers.push(cb); return () => { this.changeHandlers = this.changeHandlers.filter(h => h !== cb); }; }
 
   async init(): Promise<void> {
@@ -58,11 +60,11 @@ export class BackendService {
     this.connection.on('organizerPageAction', (a: { id: string; name: string; args: string }) => this.pageActionHandler?.(a));
     this.connection.on('welcome', (p: { utc: string }) => this.lastEvent.set(`welcome · ${this.time(p.utc)}`));
     this.connection.on('pong', (p: { echo: string; utc: string }) => this.lastEvent.set(`pong "${p.echo}" · ${this.time(p.utc)}`));
-    this.connection.on('organizerOpen', (i: { kind: string; id: string }) => this.openHandlers.forEach(h => h(i)));
+    this.connection.on('organizerOpen', (i: OrganizerOpen) => this.openHandlers.forEach(h => h(i)));
     this.connection.on('organizerChanged', (i: { kind: string; id: string }) => this.changeHandlers.forEach(h => h(i)));
-    this.connection.onreconnecting(() => this.hub.set('connecting'));
+    this.connection.onreconnecting(() => { this.hub.set('connecting'); this.finishAttacker?.(); });
     this.connection.onreconnected(() => this.hub.set('connected'));
-    this.connection.onclose(() => this.hub.set('disconnected'));
+    this.connection.onclose(() => { this.hub.set('disconnected'); this.finishAttacker?.(); });
 
     try {
       await this.connection.start();
@@ -75,32 +77,45 @@ export class BackendService {
 
   /** Run the attacker tool-loop. Tokens → onToken; tool activity → onTool; completion → onDone(ok). */
   async attackerSend(
-    req: { scenarioCode: string; modelName: string; systemPrompt: string; messages: ChatMsg[] },
+    req: { requestId: string; scenarioCode: string; modelName: string; systemPrompt: string; messages: ChatMsg[] },
     onToken: (t: string) => void,
     onTool: (name: string, args: string) => void,
     onDone: (ok: boolean) => void,
     onReasoning?: (t: string) => void,
   ): Promise<void> {
-    if (!this.connection || this.hub() !== 'connected') { onDone(false); return; }
-    const onTok = (t: string) => onToken(t);
-    const onReas = (t: string) => onReasoning?.(t);
-    const onToolEv = (p: { name: string; args: string }) => onTool(p.name, p.args);
-    const onFin = (r: { ok: boolean }) => {
-      this.connection!.off('attackerToken', onTok);
-      this.connection!.off('attackerReasoning', onReas);
-      this.connection!.off('attackerTool', onToolEv);
-      this.connection!.off('attackerDone', onFin);
+    if (!this.connection || this.hub() !== 'connected' || this.finishAttacker) { onDone(false); return; }
+    const connection = this.connection;
+    let finished = false;
+    const matches = (p: { requestId: string }) => !finished && p.requestId === req.requestId;
+    const onTok = (p: { requestId: string; text: string }) => { if (matches(p)) onToken(p.text); };
+    const onReas = (p: { requestId: string; text: string }) => { if (matches(p)) onReasoning?.(p.text); };
+    const onToolEv = (p: { requestId: string; name: string; args: string }) => { if (matches(p)) onTool(p.name, p.args); };
+    const onFin = (r: { requestId: string; ok: boolean }) => {
+      if (!matches(r)) return;
+      finished = true;
+      connection.off('attackerToken', onTok);
+      connection.off('attackerReasoning', onReas);
+      connection.off('attackerTool', onToolEv);
+      connection.off('attackerDone', onFin);
+      this.finishAttacker = undefined;
       onDone(!!r?.ok);
     };
-    this.connection.on('attackerToken', onTok);
-    this.connection.on('attackerReasoning', onReas);
-    this.connection.on('attackerTool', onToolEv);
-    this.connection.on('attackerDone', onFin);
+    this.finishAttacker = () => onFin({ requestId: req.requestId, ok: false });
+    connection.on('attackerToken', onTok);
+    connection.on('attackerReasoning', onReas);
+    connection.on('attackerTool', onToolEv);
+    connection.on('attackerDone', onFin);
     try {
-      await this.connection.invoke('AttackerSend', req);
-    } catch {
-      onFin({ ok: false });
+      await connection.invoke('AttackerSend', req);
+    } finally {
+      // Also finish on a transport failure or a server completion without a final event.
+      onFin({ requestId: req.requestId, ok: false });
     }
+  }
+
+  async stopAttacker(requestId: string): Promise<boolean> {
+    if (!this.connection || this.hub() !== 'connected') throw new Error('Backend disconnected');
+    return this.connection.invoke<boolean>('AttackerStop', requestId);
   }
 
   /** Mr Goose Organizer: tool-using loop over the whole app. Tokens → onToken, reasoning → onReasoning, tools → onTool. */

@@ -1,83 +1,89 @@
-# Mr Goose
+# MrGoose
 
-## Local runtime data
+A desktop workbench for authorized Gray Swan Arena red-teaming. Organize libraries and recon, craft with the in-app agents or an external MCP client, and prepare attempts in the real Arena.
 
-Electron keeps this checkout's profile, arena cookies and browser cache in `data/desktop`,
-logs in `data/logs`, and crash reports in `data/crashes`. These paths are resolved from
-this repository, regardless of the invoking directory. Existing AppData profiles are
-left intact; the checkout uses its own profile. The backend database remains next to
-the backend executable. Local `data/` and `work/` directories are ignored by Git.
+**MrGoose fills and reads. You verify the target and press Launch/Submit.** Retrieved pages, payloads and imported material are data, never app instructions.
 
-A Gray-Swan-arena-specific red-team cockpit. It opens the **real** arena pages in embedded tabs,
-**fills** the injection/chat surfaces with crafted payloads, reads back the real victim response —
-and leaves **every** send / launch / submit to the human.
+## Install the desktop app
 
-> Authorized IPI red-teaming. All IDs/emails/orders in `reference/` are synthetic arena fixtures;
-> arena content is DATA, never instructions.
+Windows x64, macOS Apple Silicon and macOS Intel packages share one source tree. The backend runtime is bundled: **desktop users do not need Node or .NET**.
 
-## Stack
+Current packages are **unsigned internal-test builds**, available in the artifacts of a successful [Desktop packages workflow run](https://github.com/BobPotat0/MrGoose/actions/workflows/desktop-build.yml). They are not a signed public release.
 
-- **Electron** shell (`electron/`) — window + (from P1) embedded arena tabs; spawns and kills the backend.
-- **Angular 22** renderer (`client/`) — the cockpit UI (standalone components + signals).
-- **ASP.NET Core / .NET 10** backend (`backend/`) — local sidecar: REST + SignalR, SQLite/EF Core, import, OpenRouter (later phases).
+1. Choose your OS/architecture and extract the downloaded workflow artifact ZIP.
+2. **Windows:** run `MrGoose-<version>-win-x64-Setup.exe` and follow the installer.
+3. **macOS:** open the matching DMG and drag MrGoose into Applications. Apple signing/notarization and manual Gatekeeper installation checks remain outstanding for public distribution.
+4. Launch MrGoose to open the full workspace.
 
+Installation starts with a separate user profile. To bring over a development checkout's database and Arena login, follow the explicit [data import instructions](docs/DISTRIBUTION.md#import-the-existing-checkout) before the installed app's first launch.
+
+## First use
+
+### In-app agents
+
+1. In **Settings**, add your OpenRouter key and choose the models for the in-app agents.
+2. Use **Mr Goose Organizer** to work with libraries, sources, session files and recon records.
+3. In **Workbench → Find Break**, choose a model/scenario and use **Direct chat** to craft with Mr Goose Attacker.
+4. Open the Arena, log in manually and verify the actual model/scenario. Review the prepared fields, then **press the real Arena Launch/Submit control yourself**.
+5. Bring the victim response back into the workflow for analysis and record the outcome. MCP observations alone do not establish a final result.
+
+The Arena is embedded by default and can be detached into its own window. Closing a window hides it; use the tray's **Quit MrGoose** to stop the app and backend.
+
+### Connect an external agent through MCP
+
+1. Keep the MrGoose desktop app running.
+2. Open **Settings → Local MCP — connect an external agent** and copy **Config (mcpServers)**.
+3. Register it in a local MCP client with stdio support. Adapt the surrounding config format if your host requires it, preserving the generated command, arguments and environment.
+4. In **Find Break**, select **MCP** when using an external client instead of the in-app attacker chat.
+
+The generated configuration uses the current installed app or checkout and its profile path. No token or API key needs to be pasted into MCP configuration. Local access is automatic for your OS user; connect only clients you trust with your local library and Arena preparation.
+
+The external client supplies its own model. Library and Arena operations do not require a MrGoose OpenRouter key; the Organizer's optional `web_search` operation uses the configured OpenRouter service and may incur charges. **Launch/Submit remains manual in both modes.**
+
+See [MCP setup, tools and limitations](mcp/README.md). The MCP toggle changes the crafting interface; it is not an access-control switch.
+
+## Run from source
+
+Development requires **.NET SDK 10** and a Node version allowed by `client/package-lock.json`: `^22.22.3 || ^24.15.0 || >=26.0.0`. CI uses Node 24.22.1. A .NET runtime alone cannot build the backend.
+
+From the repository root:
+
+```sh
+npm ci
+npm --prefix client ci
+npm --prefix client run build
+npm start
 ```
-MRGOOSE/
-  electron/     main.js (spawns backend, loads renderer), preload.js (fill-only page bridge)
-  client/       Angular app (shell, nav, pages, backend.service)
-  backend/      MrGoose.Backend — Minimal API + AgentHub (SignalR)
-  reference/    GROUND-TRUTH.md + captured arena samples (start here)
+
+`npm start` builds the backend and opens the workspace using the built client. For Angular live development, use `npm run dev` instead; it builds the backend, starts the client dev server and launches Electron. The app starts its own backend sidecar.
+
+After source changes, rebuild the client before using `npm start`. Copy MCP configuration from Settings again if you move the checkout or switch between development and installed copies. Quit one copy before starting the other; their default local ports overlap.
+
+## Data and updates
+
+| Runtime | Data location |
+| --- | --- |
+| Source checkout | `data/desktop`, `data/mcp`, `data/logs`, `data/crashes`; database beside the Debug backend executable |
+| Installed Windows app | `%APPDATA%/MrGoose` |
+| Installed macOS app | `~/Library/Application Support/MrGoose` |
+
+Installed resources are separate from the database, browser profile and credentials. New installed versions snapshot an existing database before schema changes. Back up the **complete data directory**; OS-protected credentials may require re-entry on another machine or OS. The Windows uninstaller preserves user data.
+
+Settings shows the app version and explicit **check → download → restart to update** controls. A Git push does not update installed apps: updates need a higher-version GitHub Release and its platform metadata. No release feed has been published by this implementation, so an update check may report it unavailable. A signed end-to-end upgrade remains to be tested.
+
+## Build and verify
+
+```sh
+# On Windows:
+npm run dist:win
+# On macOS (native architecture):
+npm run dist:mac
+# On macOS for Intel:
+npm run dist:mac:intel
 ```
 
-## Hard rails (non-negotiable)
+Outputs are in `release/`. Build scripts never publish or install them. See [Desktop distribution](docs/DISTRIBUTION.md) for signing, migration, update publishing and verification commands.
 
-- **Fill only, never send.** The page bridge exposes only `fillField` / `readDom` /
-  `snapshotConversation` / `highlightSendButton`. There is **no** send/launch/submit in the code,
-  by design — it is also a Gray Swan Rule of Engagement ("No automated submission… disqualifying offense").
-- **All in-app strings are English.**
+The stack is Electron, Angular 22 and an ASP.NET Core/.NET 10 sidecar with SQLite and SignalR (`CockpitHub`). Native CI builds and launches the packaged app on Windows x64 and macOS arm64/x64, checking UI, MCP, persistence and isolated data import.
 
-## Prerequisites
-
-- .NET SDK 10 (`dotnet --version`)
-- Node ^22.22.3, ^24.15.0, or >=26.0.0 per the client lockfile (`node -v`) and npm
-- First time: `npm install` (root) and `npm --prefix client install`
-
-## Run (dev)
-
-For external AI clients, see [Local MCP setup and limits](mcp/README.md). Normal app startup
-(`npm start`) opens the workspace. The separate Arena window is shown when requested by the agent.
-MCP uses the client's own model with automatic current-user local access. Launch/Submit stays manual.
-Closing either window hides it; use the tray's **Quit MrGoose** to stop the app.
-
-```bash
-npm run dev
-```
-
-This builds the backend, starts the Angular dev server (`http://localhost:4200`), then launches
-Electron, which spawns the backend sidecar (`http://127.0.0.1:5174`), waits for `/health`, and loads
-the cockpit. The top bar shows **backend ok** + **hub connected** when the handshake succeeds.
-
-Run pieces individually: `npm run build:backend`, `npm run dev:client`, `npm run dev:electron`.
-Use `npm start` for the workspace and `npm run start:arena` for explicit lightweight Arena/MCP mode.
-A static client build (`npm --prefix client run build`) avoids needing the Angular dev server.
-
-## Roadmap
-
-- **P0 ✅ Skeleton** — Electron + Angular + C# sidecar wired; `/health` + SignalR handshake; dark shell + nav.
-- **P1 ✅ Embedding core** — `WebContentsView` arena tabs + fill-only bridge + pick-element + bounds sync.
-- **P2 ✅ Challenges + matrix + Prompt Library + import** — EF Core/SQLite, seeded 12 scenarios, ZIP + page-source import.
-- **P3 ✅ Technique Library.**
-- **P4 ✅ Break Chatbot** — OpenRouter brain over SignalR + fill-into-tab.
-- **P5 ✅ Break Agent** — per-model×scenario dossier + semi-auto loop + verdict recording.
-
-### First run
-1. Settings → paste your OpenRouter key + model (powers the crafter).
-2. Arena Tabs → new tab → log in to Gray Swan once (session persists).
-3. Craft in Break Chatbot / Break Agent → fill into the tab → **you** press send/submit.
-
-### Known follow-ups
-- Bump `SQLitePCLRaw` (NU1903 advisory via EF Core's transitive dep).
-- Page-source import currently refreshes the matrix (modelMap); full per-surface schema import is a next step.
-- Package a self-contained build (electron-builder + published backend exe).
-
-The ignored reference/ directory is optional local material and is not included in the GitHub checkout. Use backend/Data/Seeder.cs and the scenario records for the bundled definitions.
+Provider run identification and reliable final-response collection are not implemented; observations remain provisional. Automatic MCP-client wakeups and 50-tab capacity are not established. The separate research corpus is not integrated into the app library. Packaging does not add autonomous submission or a swarm.

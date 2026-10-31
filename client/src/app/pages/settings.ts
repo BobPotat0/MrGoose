@@ -2,7 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../api.service';
 import { ToastService } from '../toast.service';
-import { KeyInfo, ModelInfo } from '../models';
+import { KeyInfo, ModelInfo, DesktopUpdate } from '../models';
 
 @Component({
   selector: 'mg-settings',
@@ -18,7 +18,7 @@ import { KeyInfo, ModelInfo } from '../models';
       @if (mcpAvailable) {
         <div class="card">
           <span class="label-mono">Local MCP — connect an external agent</span>
-          <p class="muted">Let Claude, Codex or another MCP client drive MrGoose: it reads your libraries, returns attack context, and fills Arena fields. It never submits — you verify the model/scenario and launch manually. The desktop app must be running; access is automatic for your Windows user (no pairing step).</p>
+          <p class="muted">Let Claude, Codex or another MCP client drive MrGoose: it reads your libraries, returns attack context, and fills Arena fields. It never submits — you verify the model/scenario and launch manually. The desktop app must be running; access is automatic for your local user.</p>
           @if (mcpConfig()) {
             <div class="row spread" style="margin-top:10px"><span class="label-mono">Config (mcpServers)</span><button class="btn" (click)="copy(mcpConfig(), 'config copied')">copy</button></div>
             <pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:11.5px;max-height:170px;overflow:auto">{{ mcpConfig() }}</pre>
@@ -39,7 +39,7 @@ import { KeyInfo, ModelInfo } from '../models';
       <!-- OpenRouter keys (multiple, DPAPI-encrypted) -->
       <div class="card">
         <span class="label-mono">OpenRouter keys</span>
-        <p class="muted" style="font-size:12px;margin:6px 0">Stored locally, encrypted at rest with Windows DPAPI (never returned in full). Add several and pick the active one.</p>
+        <p class="muted" style="font-size:12px;margin:6px 0">New keys use operating-system protected encryption and are never returned in full. Add several and pick the active one.</p>
         @for (k of keys(); track k.id) {
           <div class="card" style="margin-top:8px;padding:9px 11px"><div class="row spread">
             <div class="row"><strong style="font-size:13px">{{ k.name }}</strong><span class="mono dim" style="font-size:12px">{{ k.last4 }}</span>@if (k.active) { <span class="chip lime">active</span> }</div>
@@ -75,6 +75,23 @@ import { KeyInfo, ModelInfo } from '../models';
         <input class="input" [(ngModel)]="arenaUrl" placeholder="https://app.grayswan.ai/arena/challenge/…" />
         <div class="row" style="margin-top:10px"><button class="btn primary" (click)="saveArena()">save</button></div>
       </div>
+      @if (appVersion()) {
+        <footer class="row" style="gap:12px;flex-wrap:wrap;margin-top:24px" aria-label="Application version and updates">
+          <span class="muted">MrGoose {{ appVersion() }}{{ packaged() ? '' : ' · Development' }}</span>
+          @if (packaged()) {
+            @if (update().state === 'available') {
+              <button class="btn" (click)="downloadUpdate()">Download {{ update().version }}</button>
+            } @else if (update().state === 'ready') {
+              <button class="btn" (click)="installUpdate()">Restart to update</button>
+            } @else {
+              <button class="btn ghost" (click)="checkUpdate()" [disabled]="update().state === 'checking' || update().state === 'downloading'">
+                {{ update().state === 'checking' ? 'Checking…' : update().state === 'downloading' ? 'Downloading…' : 'Check for updates' }}
+              </button>
+            }
+            <span class="muted" role="status">{{ update().message }}</span>
+          }
+        </footer>
+      }
     </section>
   `,
 })
@@ -92,8 +109,28 @@ export class SettingsPage {
   model = ''; arenaUrl = '';
   newKeyName = ''; newKeyValue = ''; modelQuery = '';
   private searchTimer: any;
+  readonly appVersion = signal('');
+  readonly packaged = signal(false);
+  readonly update = signal<DesktopUpdate>({ state: 'idle', message: '' });
 
-  constructor() { this.load(); }
+  constructor() { this.load(); void this.loadApp(); }
+  async loadApp() {
+    try {
+      const app = await window.mrgoose?.app?.info();
+      if (app) { this.appVersion.set(app.version); this.packaged.set(app.packaged); if (app.updates) this.update.set(app.updates); }
+    } catch { /* Desktop bridge unavailable in browser development. */ }
+  }
+  async checkUpdate() {
+    this.update.set({ state: 'checking', message: '' });
+    try { const next = await window.mrgoose?.app?.checkUpdate(); if (next) this.update.set(next); }
+    catch { this.update.set({ state: 'error', message: 'Could not check for updates.' }); }
+  }
+  async downloadUpdate() {
+    this.update.set({ ...this.update(), state: 'downloading', message: '' });
+    try { const next = await window.mrgoose?.app?.downloadUpdate(); if (next) this.update.set(next); }
+    catch { this.update.set({ state: 'error', message: 'Download failed. Try again.' }); }
+  }
+  async installUpdate() { await window.mrgoose?.app?.installUpdate(); }
   async load() {
     const s = await this.api.settings();
     this.model = s.model; this.arenaUrl = s.arenaUrl;

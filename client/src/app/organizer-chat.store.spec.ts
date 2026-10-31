@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { OrganizerChatStore } from './organizer-chat.store';
 import { BackendService } from './backend.service';
 import { ArenaService } from './arena.service';
@@ -20,12 +21,13 @@ describe('Agent chat history and technique table', () => {
 
   beforeEach(() => {
     localStorage.clear(); requests = [];
-    backend = { backendUrl: 'test-backend', hub: signal('connected'), onOrganizerPageAction: vi.fn(),
+    backend = { backendUrl: 'test-backend', hub: signal('connected'), onOrganizerPageAction: vi.fn(), onOrganizerOpen: vi.fn(), onOrganizerChanged: vi.fn(),
       organizerChat: vi.fn(async (messages, token, _tool, done, _reasoning, table) => {
         requests.push(structuredClone(messages)); callbacks = { token, done, table };
       }) };
-    api = { organizerSystem: async () => ({ prompt: '', isCustom: false }), organizerDocs: async () => [], knowledge: async () => [], settings: async () => ({ model: 'test/model' }), organizerFiles: async () => [], deleteOrganizerFiles: async () => {} };
+    api = { organizerSystem: async () => ({ prompt: '', isCustom: false }), organizerDocs: async () => [], knowledge: async () => [], settings: async () => ({ model: 'test/model' }), organizerFiles: async () => [], deleteOrganizerFiles: async () => {}, setOrganizerActiveSession: async () => {} };
     TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
       { provide: BackendService, useValue: backend }, { provide: ArenaService, useValue: { available: false } },
       { provide: ToastService, useValue: { err: vi.fn(), ok: vi.fn() } }, { provide: ApiService, useValue: api },
     ] });

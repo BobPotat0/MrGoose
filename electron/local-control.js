@@ -17,9 +17,10 @@ function atomicJson(file, value) {
 function protectDirectory(directory) {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   if (process.platform === 'win32') {
-    const sid = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value'], { encoding: 'utf8', windowsHide: true }).trim();
+    const system32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+    const sid = execFileSync(path.join(system32, 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', '[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value'], { encoding: 'utf8', windowsHide: true }).trim();
     if (!/^S-1-\d+(?:-\d+)+$/.test(sid)) fail('CREDENTIAL_STORAGE_UNAVAILABLE');
-    execFileSync('icacls.exe', [directory, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`], { windowsHide: true, stdio: 'pipe' });
+    execFileSync(path.join(system32, 'icacls.exe'), [directory, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`], { windowsHide: true, stdio: 'pipe' });
   } else fs.chmodSync(directory, 0o700);
 }
 
@@ -52,7 +53,7 @@ class LocalControl {
   clients() { return JSON.parse(fs.readFileSync(this.registryPath, 'utf8')); }
   profiles() { return JSON.parse(fs.readFileSync(this.profilesPath, 'utf8')); }
   management() { return { clients: this.clients().map(({ tokenHash, ...c }) => c), profiles: this.profiles(), endpoint: this.endpoint, enabled: true,
-    command: this.runtimePath, args: [this.adapterPath], env: { ELECTRON_RUN_AS_NODE: '1' }, access: 'current OS user; no manual authorization' }; }
+    command: this.runtimePath, args: [this.adapterPath], env: { ELECTRON_RUN_AS_NODE: '1', MRGOOSE_MCP_DIRECTORY: this.directory }, access: 'current OS user; no manual authorization' }; }
   pair(name) {
     if (typeof name !== 'string' || !/^[\w -]{1,60}$/.test(name)) fail('INVALID_CLIENT_NAME');
     const client = { id: randomUUID(), name, tokenHash: '', scopes: [...DEFAULT_SCOPES], createdAt: new Date().toISOString() };

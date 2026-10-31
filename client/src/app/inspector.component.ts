@@ -33,6 +33,8 @@ import { MarkdownPreviewComponent } from './markdown-preview.component';
             <input class="input" [ngModel]="it.data['title']" (ngModelChange)="store.patch('title', $event)" placeholder="title" />
             <label class="ins-label">Summary</label>
             <textarea class="textarea" [ngModel]="it.data['summary']" (ngModelChange)="store.patch('summary', $event)"></textarea>
+            <label class="ins-label">When it works</label>
+            <textarea class="textarea" [ngModel]="it.data['whenItWorks']" (ngModelChange)="store.patch('whenItWorks', $event)"></textarea>
             <label class="ins-label">Example</label>
             <textarea class="textarea" style="min-height: 150px" [ngModel]="it.data['example']" (ngModelChange)="store.patch('example', $event)"></textarea>
             <label class="ins-label">Tags</label>

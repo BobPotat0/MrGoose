@@ -12,6 +12,13 @@ using MrGoose.Backend.Services;
 
 const string DefaultUrl = "http://127.0.0.1:5174";
 
+// Local migration utility, exits before starting any HTTP service or applying schema changes.
+if (args.Length == 3 && args[0] == "--backup-database")
+{
+    DesktopData.Backup(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 if (!builder.Configuration.AsEnumerable().Any(kv =>
@@ -21,6 +28,8 @@ if (!builder.Configuration.AsEnumerable().Any(kv =>
 }
 
 var dbPath = builder.Configuration["MRGOOSE_DB_PATH"] ?? Path.Combine(AppContext.BaseDirectory, "mrgoose.db");
+Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
+DesktopData.BeforeUpgrade(dbPath, builder.Configuration["MRGOOSE_APP_VERSION"]);
 // SignalR may put its access token in the WebSocket query. Do not log request URLs.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddDbContext<MrGooseDb>(o => o.UseSqlite($"Data Source={dbPath}"));
@@ -32,7 +41,8 @@ builder.Services.AddScoped<FinderService>();
 builder.Services.AddScoped<OrganizerService>();
 builder.Services.AddScoped<OrganizerFileService>();
 builder.Services.AddScoped<LibraryQueryService>();
-builder.Services.AddSignalR();
+// Leave an invocation slot available for Stop (and page-action replies) during a streaming call.
+builder.Services.AddSignalR(o => o.MaximumParallelInvocationsPerClient = 2);
 
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
@@ -63,6 +73,7 @@ using (var scope = app.Services.CreateScope())
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN Wave TEXT NOT NULL DEFAULT ''"); } catch { /* column already exists */ }
     Seeder.Run(db);
     TechniqueDefaults.EnsureBuiltins(db, overwrite: false);   // ensure built-ins + tags exist, but preserve operator edits (reset restores defaults)
+    DesktopData.MarkVersion(dbPath, builder.Configuration["MRGOOSE_APP_VERSION"]);
 }
 
 app.UseCors(CorsPolicy);

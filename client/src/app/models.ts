@@ -59,6 +59,12 @@ export interface ArenaTab { id: string; url: string; title: string; active: bool
 export interface BridgeResult { ok: boolean; note?: string; text?: string; selector?: string; }
 
 export interface MrGooseApi {
+  app?: {
+    info(): Promise<{ version: string; packaged: boolean; updates?: DesktopUpdate }>;
+    checkUpdate(): Promise<DesktopUpdate>;
+    downloadUpdate(): Promise<DesktopUpdate>;
+    installUpdate(): Promise<boolean>;
+  };
   backendUrl: string;
   backendToken?: string;
   mcp?: {
@@ -93,6 +99,8 @@ export interface MrGooseApi {
 declare global {
   interface Window { mrgoose?: MrGooseApi; }
 }
+
+export interface DesktopUpdate { state: string; message: string; version?: string; percent?: number; }
 
 export interface OrganizerFileInfo { id: string; name: string; size: number; createdAt: string; source?: 'agent' | 'upload'; }
 export interface OrganizerFileContent { file: OrganizerFileInfo; content: string; }

@@ -31,7 +31,7 @@ export class InspectorStore {
   constructor() {
     // The in-app agent and MCP both push opens/edits through the hub; reflect them live.
     // Techniques/prompts/source-docs open in the inspector; a source-link opens its own browser window.
-    this.backend.onOrganizerOpen(i => { if (['technique', 'prompt', 'source-doc', 'source-link'].includes(i.kind)) void this.open(i.kind as InspectorKind, i.id); });
+    this.backend.onOrganizerOpen(i => { if (['file', 'technique', 'prompt', 'source-doc', 'source-link'].includes(i.kind)) void this.open(i.kind as InspectorKind, i.id, i.sessionId); });
     this.backend.onOrganizerChanged(i => void this.refreshIfOpen(i.kind, i.id));
   }
   // Re-fetch an item already open in the inspector (e.g. after an external MCP edit).
@@ -61,7 +61,7 @@ export class InspectorStore {
   async openTechnique(id: string | number) {
     const t = (await this.api.techniques()).find(x => x.id === +id); if (!t) return;
     this.focus({ key: `technique:${t.id}`, kind: 'technique', id: String(t.id), title: t.title,
-      data: { title: t.title, summary: t.summary, example: t.example, tags: t.tags, builtin: t.builtin }, dirty: false });
+      data: { title: t.title, summary: t.summary, whenItWorks: t.whenItWorks, example: t.example, tags: t.tags, builtin: t.builtin }, dirty: false });
   }
   async openPrompt(id: string | number) {
     const p = (await this.api.prompts()).find(x => x.id === +id); if (!p) return;
@@ -69,6 +69,7 @@ export class InspectorStore {
       data: { title: p.title, body: p.body, tags: p.tags, scenarioCode: p.scenarioCode, verdict: p.verdict }, dirty: false });
   }
   async openFile(sessionId: string, fileId: string) {
+    if (!sessionId) return;
     try {
       const c = await this.api.organizerFile(sessionId, fileId);
       this.focus({ key: `file:${fileId}`, kind: 'file', id: fileId, title: c.file.name,
@@ -110,7 +111,7 @@ export class InspectorStore {
     this.replace(cur.key, x => ({ ...x, saving: true }));
     try {
       if (cur.kind === 'technique')
-        await this.api.updateTechnique(+cur.id, { title: cur.data['title'] as string, summary: cur.data['summary'] as string, example: cur.data['example'] as string, tags: cur.data['tags'] as string });
+        await this.api.updateTechnique(+cur.id, { title: cur.data['title'] as string, summary: cur.data['summary'] as string, whenItWorks: cur.data['whenItWorks'] as string, example: cur.data['example'] as string, tags: cur.data['tags'] as string });
       else if (cur.kind === 'prompt')
         await this.api.updatePrompt(+cur.id, { title: cur.data['title'] as string, body: cur.data['body'] as string, tags: cur.data['tags'] as string, scenarioCode: cur.data['scenarioCode'] as string, verdict: cur.data['verdict'] as string });
       else if (cur.kind === 'file')

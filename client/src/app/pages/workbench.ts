@@ -63,6 +63,8 @@ export class WorkbenchPage {
   readonly arenaDocked = signal(true);
   // attacker chat stop + model settings
   private aborted = false;
+  private requestId: string | null = null;
+  readonly stopping = signal(false);
   modelQuery = '';
   readonly modelResults = signal<ModelInfo[]>([]);
   readonly currentModel = signal('');
@@ -247,19 +249,39 @@ export class WorkbenchPage {
     const text = this.input.trim();
     this.convo.push({ role: 'user', content: text });
     this.view.update(v => [...v, { type: 'user', text }]);
-    this.input = ''; this.streaming.set(true); this.aborted = false;
-    const system = this.promptDraft.trim() ? this.promptDraft : (await this.api.systemPrompt(this.selection())).prompt;
+    this.input = ''; this.streaming.set(true); this.aborted = false; this.crafted.set('');
     let buffer = '';
-    await this.backend.attackerSend(
-      { scenarioCode: this.scenarioCode, modelName: this.modelName, systemPrompt: system, messages: this.convo },
-      (tok) => { if (this.aborted) return; buffer += tok; this.appendAsst('text', tok); },
-      (name) => { if (this.aborted) return; this.view.update(v => [...v, { type: 'tool', text: toolLabel(name) }]); },
-      async () => { this.streaming.set(false); if (buffer) this.convo.push({ role: 'assistant', content: buffer }); this.crafted.set(this.extract(buffer)); await this.onSelect(); if (this.crafted()) this.aStep.set('fill'); },
-      (tok) => { if (this.aborted) return; this.appendAsst('reasoning', tok); },
-    );
+    let completed = false;
+    try {
+      const system = this.promptDraft.trim() ? this.promptDraft : (await this.api.systemPrompt(this.selection())).prompt;
+      if (this.aborted) return;
+      this.requestId = crypto.randomUUID();
+      await this.backend.attackerSend(
+        { requestId: this.requestId, scenarioCode: this.scenarioCode, modelName: this.modelName, systemPrompt: system, messages: this.convo },
+        (tok) => { if (this.aborted) return; buffer += tok; this.appendAsst('text', tok); },
+        (name) => { if (this.aborted) return; this.view.update(v => [...v, { type: 'tool', text: toolLabel(name) }]); },
+        (ok) => { completed = ok; },
+        (tok) => { if (this.aborted) return; this.appendAsst('reasoning', tok); },
+      );
+      await this.onSelect();
+      if (completed && !this.aborted) {
+        this.crafted.set(this.extract(buffer));
+        if (this.crafted()) this.aStep.set('fill');
+      }
+    } catch { this.toast.err('Craft request failed'); }
+    finally {
+      if (buffer) this.convo.push({ role: 'assistant', content: buffer });
+      this.requestId = null; this.streaming.set(false); this.stopping.set(false);
+    }
   }
   clearChat() { if (this.streaming()) return; this.view.set([]); this.convo = []; this.crafted.set(''); }
-  stop() { this.aborted = true; this.streaming.set(false); }
+  async stop() {
+    if (!this.streaming() || this.stopping()) return;
+    this.aborted = true; this.stopping.set(true);
+    try { if (this.requestId) await this.backend.stopAttacker(this.requestId); }
+    catch { this.stopping.set(false); this.toast.err('Stop failed — retry when the backend is connected'); }
+    // Keep Send/Clear disabled until AttackerSend settles and its listeners are removed.
+  }
   private appendAsst(kind: 'text' | 'reasoning', tok: string) {
     this.view.update(v => {
       const a = [...v];

@@ -1,61 +1,64 @@
 # MrGoose through local MCP
 
-For a fresh checkout, install the root/client dependencies and build the client once (`npm --prefix client run build`) before `npm start`, or use `npm run dev`.
+Use a local MCP client to operate the running MrGoose desktop app. The external client supplies the model; MrGoose supplies library operations, crafting context and fill/read access to real Arena tabs. **Every Launch/Submit is a human action.**
 
-Normal app startup (`npm start`, the app entrypoint, or reopening the running app) opens the workspace. The separate Arena popup stays hidden until explicitly requested, such as by an agent's MCP `arena_open_tab` or `attempt_present` call. MCP data reads alone do not show it. Close/Hide keeps the app and tabs running; the tray provides Show workspace, Show Arena and Quit.
+## Setup
 
-Local access is automatic for the current Windows user. There is no authorization/pairing button. Configure a local stdio server in your MCP host with the command and arguments below (adjust the checkout path if needed):
+1. Install and open the desktop app, or follow the [source setup](../README.md#run-from-source).
+2. In **Settings → Local MCP — connect an external agent**, copy **Config (mcpServers)**.
+3. Add the generated server to a local MCP host with stdio support. Hosts may use different configuration wrappers; preserve the generated command, arguments and environment.
+4. Keep MrGoose running. Select **MCP** in **Workbench → Find Break** to replace the in-app attacker chat with the external-client workflow.
 
-```json
-{
-  "command": "D:\\MrGoose\\node_modules\\electron\\dist\\electron.exe",
-  "args": ["D:\\MrGoose\\mcp\\server.cjs"],
-  "env": { "ELECTRON_RUN_AS_NODE": "1" }
-}
-```
+Use the generated config for installed and source copies. Installed configs point to the installed executable and bundled adapter, with `ELECTRON_RUN_AS_NODE=1` and an explicit `MRGOOSE_MCP_DIRECTORY` for the profile. Regenerate after moving the app/checkout or changing which copy you use. The host launches the stdio adapter; no separate MCP process needs to be started manually.
 
-The MCP entrypoint discovers this checkout's private local broker automatically. Credentials remain in current-user-protected local storage; token values are not part of host configuration or tool output. The broker stays on loopback, rejects browser Origin headers, validates Host and requires the locally managed token. Trusted programs under the same OS user share the default attempt collection. No remote MCP listener, arbitrary JavaScript, shell, click, keypress, cookie or browser-storage tool is exposed.
+There is no pairing button or token to paste. Access is automatic for the current OS user. Trusted clients can read and modify local records, including deletion where the Organizer catalog permits it. Connect only clients you trust. The Direct chat/MCP toggle is a UI choice, not a permission boundary.
 
-The external client uses its own model. MrGoose's OpenRouter key is not needed for MCP. Launch/Submit always remains manual.
+Library reads and Arena operations do not require MrGoose's OpenRouter key. The Organizer's optional `web_search` operation calls the configured OpenRouter service and may incur charges; it is an exception to the otherwise external-model workflow.
 
-## Workspace and Arena startup
+The broker listens only on loopback, validates Host, rejects browser Origin headers and requires a locally managed token. Credentials stay in current-user-protected storage. No remote MCP listener or arbitrary JavaScript, shell, click, keypress, cookie or browser-storage tool is exposed.
 
-Use **Cockpit** in the Arena window or **Show workspace** in the tray to restore the app's libraries/editors. A production build (`npm --prefix client run build`) is served at the stable local origin `http://127.0.0.1:5175`, preserving renderer localStorage/history across restarts without Angular's dev server. Existing development-origin history remains scoped to its original origin. If no client build exists, the workspace uses the normal development URL.
+## Roles and tools
 
-`npm run start:cockpit` is also a workspace entrypoint. Only explicit `npm run start:arena` / `--arena-only` mode opens the lightweight Arena host without loading the workspace, for agent-driven use. `npm run dev` remains available for client development. `MRGOOSE_RENDERER_URL` explicitly chooses an external local development server.
+The adapter exposes 19 top-level tools. Schemas are defined in `catalog.cjs`; use discovery rather than guessing parameters.
 
-## Workflow
+| Purpose | Tools |
+| --- | --- |
+| App/library reads | `mrgoose_status`, `library_search`, `library_read` |
+| Organizer data operations | `organizer_catalog`, `organizer_run` |
+| Attacker crafting context | `read_attack_context` |
+| Arena inspection and profiles | `arena_tabs`, `arena_profiles`, `arena_open_tab`, `arena_inspect`, `arena_bind_profile` |
+| Persistent attempts | `attempt_prepare`, `attempt_list`, `attempt_get`, `attempt_present`, `attempt_inspect` |
+| Provisional observations | `attempt_observe`, `attempt_observations` |
+| Presentation | `window_hide` |
 
-1. `library_search` then `library_read`: retrieve bounded app records with source provenance and hashes. Collections cover challenges, scenarios, models, prompts, techniques, dossiers, imported submissions, effective operational docs and operator notes. The separate research corpus is not integrated. Returned content is data, not instructions.
-2. `arena_open_tab`: open the approved Arena challenge URL. Log in manually if required.
-3. `arena_tabs` and `arena_inspect`: address the returned tab ID and navigation revision; inspect field selectors, editable flags, headings/control labels and candidate result regions. Credential fields are excluded. An inspection is a snapshot, not proof that every asynchronous form component has settled.
-4. `arena_bind_profile`: bind field names to selectors observed in that owned tab, with an optional observed result region. No manual JSON/profile setup is required. Arbitrary or credential selectors are rejected. Advanced operator profiles remain available in Settings.
-5. `attempt_prepare`: supply an idempotency key, database challenge/scenario/model IDs, profile ID and exact field values. Pass the inspected tab ID/navigation to use that tab, or omit them to create a dedicated tab. Successful preparation verifies the complete supplied field map and presents the Arena window for human review. Model/scenario selection in the provider UI is still operator-verified.
-6. Review the page and click Launch/Submit manually. The popup has no synthetic launch button; the human uses the actual Arena control.
-7. `attempt_get`, `attempt_observe`, `attempt_observations`: read persistent attempt state and save/read bounded provisional DOM observations. These keep identity/completion unknown. A new page navigation cannot be attributed safely until a provider collector exists, so it returns `IDENTITY_UNVERIFIED` rather than mixing results.
+**Organizer:** discover operations through `organizer_catalog`, then invoke one through `organizer_run`. These include library/recon edits, session files, source reads and `open_in_view`. File/source operations are nested Organizer operations, not additional top-level MCP tools. Inspector previews open in the workspace; a source link opens in a separate browser window. Arena actions use the dedicated Arena tools.
 
-Other tools: `mrgoose_status`, `arena_profiles`, `attempt_list`, `attempt_inspect`, `attempt_present`, `window_hide`. All tool schemas and broker validation share `catalog.cjs`. The current surface has 16 tools. No automatic continuation/wakeup is assumed for any MCP host.
+**Attacker:** `read_attack_context` returns bounded crafting context for a model × scenario. Read full referenced records through `library_read`. Retrieved content is untrusted data, never instructions. The separate research corpus is not integrated.
+
+## Prepare and review an attempt
+
+1. Use `library_search`, `library_read` and `read_attack_context` to retrieve the intended target and relevant records, retaining provenance and hashes.
+2. Open **Workbench → Find Break** for Arena work, or detach the Arena to keep it visible while browsing other workspace pages. Use `arena_open_tab` for the approved Arena URL; log in manually if required.
+3. Use `arena_tabs` and `arena_inspect` with the returned tab ID/navigation revision. Inspection returns non-sensitive field metadata and candidate result regions, not credential values. Asynchronous form components may still be loading.
+4. Use `arena_bind_profile` to bind field names to selectors observed in that owned tab. Credential and arbitrary unobserved selectors are rejected; manual profile JSON is not required.
+5. Use `attempt_prepare` with an idempotency key, database challenge/scenario/model IDs, profile ID and exact field map. Supply both tab ID and navigation to reuse a tab, or omit both for a dedicated tab. Successful preparation verifies the supplied fields for human review.
+6. **Verify the actual model/scenario and fields in the real page, then click Launch/Submit yourself.** Metadata in MrGoose does not prove the provider's selected target.
+7. Use `attempt_get`, `attempt_observe` and `attempt_observations` to inspect state and retain bounded provisional DOM observations. These are not verified final responses or success verdicts.
+
+The Arena is embedded by default and can be detached. Closing/hiding windows leaves the app running; use the tray to restore the workspace or quit. MCP library reads alone do not require an Arena tab.
 
 ## Persistence and limits
 
-Attempts and observations use additive version-1 tables in the existing application SQLite database. A consistent pre-MCP SQLite backup is created on first addition to an existing DB. Inputs, readback receipts, target metadata, ownership and observation provenance persist; browser views do not survive a process restart. Old tab generations detach explicitly. A failed preparation remains recorded; use a new request key for a new attempt.
+Attempts and observations persist in the application's SQLite database. Intended inputs, readback receipts, target metadata and provenance survive client disconnects and app restarts; browser tab instances do not. Tabs from an older process generation detach explicitly. Failed preparations remain recorded; use a new request key for a new attempt.
 
-No automatic provider chat/run identification, final-result collector, fixed-position submit queue or verified 50-tab capacity exists yet. A stable DOM snapshot is not a final response. The late-loading required `from_email` field and a transient `TAB_LOADING` error were observed during the real Arena preparation check; form readiness still needs provider-specific validation. Tab creation now waits for native load/navigation quiescence before returning.
+Prepared inputs cannot be edited through the cockpit bridge. Manual page edits remain possible, so a fill receipt proves preparation rather than the exact eventual submission.
 
-Prepared inputs cannot be edited through the cockpit bridge. Manual page edits are possible, so a fill receipt proves preparation, not the exact eventual submission. Model/scenario metadata is intended context until verified in Arena.
+Provider chat/run identification and a reliable final-result collector are not implemented. Identity/completion remain unknown; ambiguous navigation returns `IDENTITY_UNVERIFIED` instead of mixing results. A stable DOM snapshot does not prove finality. Provider-specific form readiness, including late-loading required fields, still needs operator verification.
+
+There is no fixed-position submit queue, verified 50-tab capacity or automatic host continuation/wakeup. Tool/protocol tests do not establish compatibility with every individual MCP host application.
 
 ## Verification
 
-Use compatible Node/.NET from the repository's setup. Core commands:
+Use compatible Node and .NET SDK from the [root setup](../README.md#run-from-source). Current cross-platform checks and packaged-app smoke commands are documented in [Desktop distribution](../docs/DISTRIBUTION.md#checks).
 
-```powershell
-node --test --test-isolation=none tests/runtime-paths.test.js tests/startup.test.js tests/cockpit-server.test.js
-node --check electron/main.js
-npm --prefix client test -- --watch=false
-npm --prefix client run build
-node_modules/.bin/electron.cmd tests/arena-window-smoke.cjs
-node_modules/.bin/electron.cmd tests/mcp-smoke.cjs
-node tests/mcp-desktop-smoke.cjs
-```
-
-MCP/desktop smoke tests require the isolated backend build under `work/mcp-increment/backend`; the desktop test also uses the isolated client build under `work/mcp-increment/client`. See the test sources. Fixtures use isolated DBs/profiles and never submit to Arena or contact a model. The popup test verifies native bounds, resizing, tab switching, safe titles and hide/read/reopen. The desktop test verifies normal workspace startup/reopen with Arena hidden; the SDK integration verifies that an explicit MCP arena_open_tab call displays the separate popup. SDK legacy and 2026-07-28 clients were exercised; individual Claude Code/Codex/OpenCode host apps have not all been tested.
+The native packaging workflow tests the bundled MCP adapter, Inspector operations, persistence and isolated data import on Windows x64 and macOS arm64/x64. Tests use synthetic profiles and do not submit to Arena or make paid model calls. A signed release/update installation and manual Mac installation checks remain separate release work.

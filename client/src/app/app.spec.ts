@@ -27,7 +27,7 @@ describe('Workspace sidebar', () => {
     const fixture = TestBed.createComponent(App); fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
     const links = [...root.querySelectorAll('.sidebar a')].map(a => a.getAttribute('href'));
-    expect(links).toEqual(['/organizer', '/workbench', '/prompts', '/techniques', '/challenges', '/settings']);
+    expect(links).toEqual(['/organizer', '/workbench', '/sources', '/prompts', '/techniques', '/challenges', '/settings']);
     expect(root.querySelector('nav')?.textContent).toContain('Workspace');
     expect(root.querySelector('nav')?.textContent).toContain('Libraries');
     expect(root.querySelector('[aria-label="Agent sessions"]')).not.toBeNull();

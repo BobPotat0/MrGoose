@@ -32,3 +32,5 @@ Thumbs.db
 # local runtime profiles and scratch files
 /data/
 /work/
+/build/
+/release/
