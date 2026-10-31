@@ -6,6 +6,9 @@ on:
     tags: ['v*']
 permissions:
   contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   package:
     strategy:

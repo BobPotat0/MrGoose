@@ -14,8 +14,13 @@ function run(executable, args, env = {}) {
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status || 1);
 }
-const npmCli = process.env.npm_execpath || path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
-run(process.execPath, [npmCli, '--prefix', 'client', 'run', 'build']);
+if (process.env.npm_execpath || process.platform === 'win32') {
+  const npmCli = process.env.npm_execpath || path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  run(process.execPath, [npmCli, '--prefix', 'client', 'run', 'build']);
+} else {
+  // Unix npm is an executable on PATH; Node lives in bin while npm's JS lives in lib.
+  run('npm', ['--prefix', 'client', 'run', 'build']);
+}
 fs.rmSync(staging, { recursive: true, force: true });
 run(process.env.MRGOOSE_DOTNET || 'dotnet', ['publish', 'backend/MrGoose.Backend.csproj', '-c', 'Release', '-r', rid,
   '--self-contained', 'true', '--artifacts-path', path.join(root, 'work', 'packaging-dotnet', rid), '-o', staging,
