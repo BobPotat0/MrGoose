@@ -2,6 +2,11 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
+// GitHub represents missing secrets as empty strings. An empty CSC_LINK is otherwise
+// interpreted by the signing tooling as the repository directory, not as "no certificate".
+for (const name of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) {
+  if (process.env[name] === '') delete process.env[name];
+}
 const platform = process.argv[2];
 const arch = process.argv[3] || (platform === 'mac' ? process.arch : 'x64');
 if (!['win', 'mac'].includes(platform) || !['x64', 'arm64'].includes(arch) || platform === 'win' && arch !== 'x64') throw new Error('Supported builds: win x64, mac arm64, mac x64');
