@@ -18,6 +18,8 @@ The MCP entrypoint discovers this checkout's private local broker automatically.
 
 The external client uses its own model. MrGoose's OpenRouter key is not needed for MCP. Launch/Submit always remains manual.
 
+For an installed app, copy the configuration from Settings instead of using the checkout paths above. It uses the installed executable, bundled adapter and explicit `MRGOOSE_MCP_DIRECTORY` for that app's user profile. See [Desktop distribution](../docs/DISTRIBUTION.md).
+
 ## Workspace and Arena startup
 
 Use **Cockpit** in the Arena window or **Show workspace** in the tray to restore the app's libraries/editors. A production build (`npm --prefix client run build`) is served at the stable local origin `http://127.0.0.1:5175`, preserving renderer localStorage/history across restarts without Angular's dev server. Existing development-origin history remains scoped to its original origin. If no client build exists, the workspace uses the normal development URL.

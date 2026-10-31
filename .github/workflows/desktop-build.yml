@@ -1,0 +1,79 @@
+name: Desktop packages
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/desktop-distribution']
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+          - os: macos-15
+            platform: mac
+            arch: arm64
+          - os: macos-15-intel
+            platform: mac
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: npm ci
+      - name: Verify native test architecture
+        run: node -e "if(process.arch!=='${{ matrix.arch }}') throw Error('Runner architecture does not match the package under test')"
+      - name: Validate release tag
+        run: node -e "if(process.env.GITHUB_REF_TYPE==='tag' && process.env.GITHUB_REF_NAME!=='v'+require('./package.json').version) throw Error('Release tag must match package.json version')"
+      - run: npm --prefix client ci
+      - run: node --test tests/runtime-paths.test.js tests/startup.test.js tests/cockpit-server.test.js tests/distribution.test.js
+      - run: npm --prefix client test -- --watch=false
+      - name: Backend integration and encrypted-data checks
+        run: dotnet run --project tests/AgentToolsSmoke/AgentToolsSmoke.csproj -c Debug
+      - name: Backend streaming cancellation check
+        run: dotnet run --project tests/AttackerCancellationSmoke/AttackerCancellationSmoke.csproj -c Debug
+      - name: Build package (never publishes)
+        run: node scripts/build-desktop.cjs ${{ matrix.platform }} ${{ matrix.arch }}
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Launch packaged app and test UI, persistence, MCP and local data import
+        run: node tests/packaged-smoke.cjs --ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-evidence-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            work/packaged-smoke/**/report.json
+            work/packaged-smoke/**/*.log
+            work/packaged-smoke/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MrGoose-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
+          if-no-files-found: error

@@ -712,7 +712,7 @@
               <button class="btn" (click)="clearChat()" [disabled]="streaming()">Clear</button>
             }
             @if (streaming()) {
-              <button class="btn" (click)="stop()">Stop</button>
+              <button class="btn" (click)="stop()" [disabled]="stopping()">{{ stopping() ? 'Stopping…' : 'Stop' }}</button>
             }
             <button class="btn primary" (click)="send()" [disabled]="streaming() || !input.trim()">
               {{ streaming() ? 'Crafting…' : 'Send' }}

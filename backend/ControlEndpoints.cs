@@ -122,7 +122,7 @@ public static class ControlEndpoints
                     var raw = await organizer.ExecuteDataToolAsync(tool, toolArgs, string.IsNullOrWhiteSpace(mcpSession) ? null : mcpSession);
                     // reflect MCP-driven opens/edits in the operator's cockpit inspector (live)
                     if (tool == "open_in_view" && JsonNode.Parse(raw) is JsonObject shown && shown["kind"] is not null && shown["id"] is not null)
-                        await hub.Clients.All.SendAsync("organizerOpen", new { kind = shown["kind"]!.GetValue<string>(), id = shown["id"]!.GetValue<string>() });
+                        await hub.Clients.All.SendAsync("organizerOpen", new { kind = shown["kind"]!.GetValue<string>(), id = shown["id"]!.GetValue<string>(), sessionId = mcpSession });
                     else if (tool is "update_technique" or "update_prompt" && a.ValueKind == JsonValueKind.Object && a.TryGetProperty("id", out var idEl) && idEl.TryGetInt32(out var changedId))
                         await hub.Clients.All.SendAsync("organizerChanged", new { kind = tool == "update_technique" ? "technique" : "prompt", id = changedId.ToString() });
                     object? parsed; try { parsed = Content(raw); } catch { parsed = raw; }

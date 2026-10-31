@@ -8,6 +8,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('mrgoose', {
   backendUrl: process.env.MRGOOSE_BACKEND_URL || 'http://127.0.0.1:5174',
   backendToken: process.argv.find(x => x.startsWith('--mrgoose-backend-token='))?.split('=')[1] || '',
+  app: {
+    info: () => ipcRenderer.invoke('mrgoose:app:info'),
+    checkUpdate: () => ipcRenderer.invoke('mrgoose:update:check'),
+    downloadUpdate: () => ipcRenderer.invoke('mrgoose:update:download'),
+    installUpdate: () => ipcRenderer.invoke('mrgoose:update:install'),
+  },
   mcp: {
     status: () => ipcRenderer.invoke('mrgoose:mcp:status'),
     saveProfile: (profile) => ipcRenderer.invoke('mrgoose:mcp:profile', profile),

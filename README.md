@@ -1,8 +1,14 @@
 # Mr Goose
 
+## Desktop builds
+
+Windows installer and macOS DMG/ZIP builds use the same source tree. See [Desktop distribution](docs/DISTRIBUTION.md) for build commands, data import, signing and release/update setup. Windows: `npm run dist:win`. macOS: `npm run dist:mac` (Apple Silicon) or `npm run dist:mac:intel`, on a Mac.
+
+Installed builds include their backend runtime and keep user data separately from application files. Settings shows the application version and explicit update controls. Updates require a published release; building locally does not publish one.
+
 ## Local runtime data
 
-Electron keeps this checkout's profile, arena cookies and browser cache in `data/desktop`,
+During development, Electron keeps this checkout's profile, arena cookies and browser cache in `data/desktop`,
 logs in `data/logs`, and crash reports in `data/crashes`. These paths are resolved from
 this repository, regardless of the invoking directory. Existing AppData profiles are
 left intact; the checkout uses its own profile. The backend database remains next to
@@ -78,6 +84,6 @@ A static client build (`npm --prefix client run build`) avoids needing the Angul
 ### Known follow-ups
 - Bump `SQLitePCLRaw` (NU1903 advisory via EF Core's transitive dep).
 - Page-source import currently refreshes the matrix (modelMap); full per-surface schema import is a next step.
-- Package a self-contained build (electron-builder + published backend exe).
+- Verify macOS packages/signing on real Macs and complete a signed release/update installation test.
 
 The ignored reference/ directory is optional local material and is not included in the GitHub checkout. Use backend/Data/Seeder.cs and the scenario records for the bundled definitions.

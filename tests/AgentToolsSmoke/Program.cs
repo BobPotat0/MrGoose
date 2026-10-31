@@ -136,6 +136,46 @@ await using (var host = web.Build())
 }
 Console.WriteLine("PASS: real local HTTP upload, uploaded provenance, exact preview/download bytes, session isolation, invalid UTF-8 rejection and cleanup.");
 
+// Installed-build data protection: backup committed WAL content before migrations, once per version.
+var desktopDirectory = Path.Combine(Path.GetTempPath(), "mrgoose-desktop-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(desktopDirectory);
+try
+{
+    var database = Path.Combine(desktopDirectory, "state.db");
+    using (var source = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database}"))
+    {
+        source.Open();
+        using var command = source.CreateCommand();
+        command.CommandText = "PRAGMA journal_mode=WAL; CREATE TABLE Preserved(Value TEXT); INSERT INTO Preserved VALUES('exact fixture')";
+        command.ExecuteNonQuery();
+        DesktopData.BeforeUpgrade(database, "0.1.0");
+        var backups = Directory.GetFiles(Path.Combine(desktopDirectory, "backups"), "*.db");
+        Check(backups.Length == 1, "Existing databases must be backed up before first packaged schema changes");
+        using var copy = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={backups[0]};Mode=ReadOnly");
+        copy.Open(); using var read = copy.CreateCommand(); read.CommandText = "SELECT Value FROM Preserved";
+        Check((string)read.ExecuteScalar()! == "exact fixture", "Backup must include committed WAL content");
+        DesktopData.MarkVersion(database, "0.1.0"); DesktopData.BeforeUpgrade(database, "0.1.0");
+        Check(Directory.GetFiles(Path.Combine(desktopDirectory, "backups"), "*.db").Length == 1, "Same-version restart must not repeat backups");
+        DesktopData.BeforeUpgrade(database, "0.2.0");
+        Check(Directory.GetFiles(Path.Combine(desktopDirectory, "backups"), "*.db").Length == 2, "New version must create a new backup");
+    }
+}
+finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(desktopDirectory, recursive: true); }
+
+var originalDesktopKey = Environment.GetEnvironmentVariable("MRGOOSE_KEY_ENCRYPTION_KEY");
+try
+{
+    Environment.SetEnvironmentVariable("MRGOOSE_KEY_ENCRYPTION_KEY", Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
+    var encrypted = KeyStore.Protect("offline-fixture-key");
+    Check(encrypted.StartsWith("vault:") && KeyStore.Unprotect(encrypted) == "offline-fixture-key", "Desktop vault must round-trip exact API keys");
+    var tampered = Convert.FromBase64String(encrypted[6..]); tampered[^1] ^= 1;
+    Check(KeyStore.Unprotect("vault:" + Convert.ToBase64String(tampered)) == "", "Authenticated encryption must reject tampered ciphertext");
+    Environment.SetEnvironmentVariable("MRGOOSE_KEY_ENCRYPTION_KEY", null);
+    Check(KeyStore.Unprotect(encrypted) == "", "Missing desktop key must not expose stored ciphertext as a provider key");
+}
+finally { Environment.SetEnvironmentVariable("MRGOOSE_KEY_ENCRYPTION_KEY", originalDesktopKey); }
+Console.WriteLine("PASS: installed-data WAL backup, per-version backup gating, desktop AES-GCM round-trip, tamper rejection and missing-key handling.");
+
 
 
 sealed class ClientFactory(HttpMessageHandler handler) : IHttpClientFactory

@@ -7,7 +7,7 @@ using MrGoose.Backend.Services;
 namespace MrGoose.Backend.Hubs;
 
 public record ChatMsgDto(string Role, string Content);
-public record AttackerSendRequest(string ScenarioCode, string ModelName, string SystemPrompt, List<ChatMsgDto> Messages);
+public record AttackerSendRequest(string ScenarioCode, string ModelName, string SystemPrompt, List<ChatMsgDto> Messages, string RequestId);
 
 /// <summary>
 /// Live channel to the cockpit. P0: handshake. P4/P5: runs the attacker tool-loop — the model reads
@@ -17,6 +17,7 @@ public record AttackerSendRequest(string ScenarioCode, string ModelName, string 
 public sealed class CockpitHub(MrGooseDb db, OpenRouterClient openRouter, AttackerService craft, FinderService finder, OrganizerService agent) : Hub
 {
     private const int MaxRounds = 6;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string RequestId, CancellationTokenSource Cancellation)> Attacks = new();
 
     // pending client-mediated page actions for the Mr Goose Organizer (keyed by action id)
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string ConnectionId, TaskCompletionSource<string> Completion)> PagePending = new();
@@ -68,7 +69,7 @@ public sealed class CockpitHub(MrGooseDb db, OpenRouterClient openRouter, Attack
                         result = $"Displayed a snapshot of all {rows.Count} current techniques in the operator's chat. No techniques were changed.";
                     }
                     if (name == "open_in_view" && JsonNode.Parse(result) is JsonObject opened && opened["kind"] is not null && opened["id"] is not null)
-                        await Clients.Caller.SendAsync("organizerOpen", new { kind = opened["kind"]!.GetValue<string>(), id = opened["id"]!.GetValue<string>() });
+                        await Clients.Caller.SendAsync("organizerOpen", new { kind = opened["kind"]!.GetValue<string>(), id = opened["id"]!.GetValue<string>(), sessionId });
                     msgs.Add(ToolMsg(id, name, result));
                 }
             }
@@ -149,54 +150,78 @@ public sealed class CockpitHub(MrGooseDb db, OpenRouterClient openRouter, Attack
 
     public async Task AttackerSend(AttackerSendRequest req)
     {
-        var key = await KeyStore.GetActiveKeyAsync(db);
-        var model = (await db.Settings.FindAsync("openrouter.model"))?.Value ?? "";
-        if (string.IsNullOrWhiteSpace(key))
+        if (!Guid.TryParse(req.RequestId, out _)) throw new HubException("A valid request ID is required.");
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Context.ConnectionAborted);
+        if (!Attacks.TryAdd(Context.ConnectionId, (req.RequestId, cancellation)))
         {
-            await Clients.Caller.SendAsync("attackerToken", "⚠ No OpenRouter key set. Add it in Settings to use the attacker.");
-            await Clients.Caller.SendAsync("attackerDone", new { ok = false });
+            await Clients.Caller.SendAsync("attackerDone", new { requestId = req.RequestId, ok = false, cancelled = false });
             return;
         }
-        if (string.IsNullOrWhiteSpace(model)) model = "openai/gpt-4o-mini";
-
-        var system = string.IsNullOrWhiteSpace(req.SystemPrompt)
-            ? await craft.BuildSystemPromptAsync(new AttackerService.PromptSelection(req.ScenarioCode, req.ModelName, [], [], [], true))
-            : req.SystemPrompt;
-
-        var messages = new List<JsonNode> { Msg("system", system) };
-        foreach (var m in req.Messages) messages.Add(Msg(m.Role, m.Content));
-
-        var tools = AttackerService.BuildTools();
-
+        var ct = cancellation.Token;
+        var ok = false;
         try
         {
+            var key = await KeyStore.GetActiveKeyAsync(db);
+            var model = (await db.Settings.FindAsync("openrouter.model"))?.Value ?? "";
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                await Clients.Caller.SendAsync("attackerToken", new { requestId = req.RequestId, text = "⚠ No OpenRouter key set. Add it in Settings to use the attacker." });
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(model)) model = "openai/gpt-4o-mini";
+            var system = string.IsNullOrWhiteSpace(req.SystemPrompt)
+                ? await craft.BuildSystemPromptAsync(new AttackerService.PromptSelection(req.ScenarioCode, req.ModelName, [], [], [], true))
+                : req.SystemPrompt;
+            var messages = new List<JsonNode> { Msg("system", system) };
+            foreach (var m in req.Messages) messages.Add(Msg(m.Role, m.Content));
+            var tools = AttackerService.BuildTools();
             for (var round = 0; round < MaxRounds; round++)
             {
+                ct.ThrowIfCancellationRequested();
                 var assistant = await openRouter.StreamCompleteAsync(key, model, messages, tools,
-                    tok => Clients.Caller.SendAsync("attackerToken", tok),
-                    tok => Clients.Caller.SendAsync("attackerReasoning", tok),
-                    Context.ConnectionAborted);
+                    tok => Clients.Caller.SendAsync("attackerToken", new { requestId = req.RequestId, text = tok }, ct),
+                    tok => Clients.Caller.SendAsync("attackerReasoning", new { requestId = req.RequestId, text = tok }, ct),
+                    ct);
+                ct.ThrowIfCancellationRequested();
                 messages.Add(assistant);
 
                 if (assistant["tool_calls"] is not JsonArray calls || calls.Count == 0) break;
 
                 foreach (var tc in calls)
                 {
+                    ct.ThrowIfCancellationRequested();
                     var id = tc?["id"]?.GetValue<string>() ?? "";
                     var name = tc?["function"]?["name"]?.GetValue<string>() ?? "";
                     var args = tc?["function"]?["arguments"]?.GetValue<string>() ?? "{}";
-                    await Clients.Caller.SendAsync("attackerTool", new { name, args });
+                    await Clients.Caller.SendAsync("attackerTool", new { requestId = req.RequestId, name, args }, ct);
+                    ct.ThrowIfCancellationRequested();
                     var result = await craft.ExecuteToolAsync(req.ModelName, req.ScenarioCode, name, args);
                     messages.Add(ToolMsg(id, name, result));
                 }
             }
-            await Clients.Caller.SendAsync("attackerDone", new { ok = true });
+            ct.ThrowIfCancellationRequested();
+            ok = true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Stop is a normal completion, not a model/provider error.
         }
         catch (Exception ex)
         {
-            await Clients.Caller.SendAsync("attackerToken", $"\n[error] {ex.Message}");
-            await Clients.Caller.SendAsync("attackerDone", new { ok = false });
+            await Clients.Caller.SendAsync("attackerToken", new { requestId = req.RequestId, text = $"\n[error] {ex.Message}" });
         }
+        finally
+        {
+            Attacks.TryRemove(Context.ConnectionId, out _);
+            await Clients.Caller.SendAsync("attackerDone", new { requestId = req.RequestId, ok = ok && !ct.IsCancellationRequested, cancelled = ct.IsCancellationRequested });
+        }
+    }
+
+    public bool AttackerStop(string requestId)
+    {
+        if (!Attacks.TryGetValue(Context.ConnectionId, out var run) || run.RequestId != requestId) return false;
+        try { run.Cancellation.Cancel(); return true; }
+        catch (ObjectDisposedException) { return false; } // completion raced with Stop
     }
 
     private static JsonObject Msg(string role, string content) => new() { ["role"] = role, ["content"] = content };
