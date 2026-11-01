@@ -158,6 +158,10 @@ function clickText(text) {
   step = 'organizer:inspector';
   await go(renderer, 'organizer');
   check(await browser.evaluate("document.querySelectorAll('.quick-actions button').length >= 6"), 'Organizer quick-action buttons render');
+  check(await clickText('+ add'), 'the "+ add" quick-action button is clickable');
+  await until(() => browser.evaluate("!!document.querySelector('.qa-editor')"), 8000, 'quick-action editor');
+  check(true, 'adding a quick-action opens the editor');
+  await browser.evaluate("[...document.querySelectorAll('.qa-editor button')].find(b => (b.textContent||'').trim()==='Close')?.click()");
   const techId = await browser.evaluate("fetch(window.mrgoose.backendUrl+'/api/techniques',{method:'POST',headers:{Authorization:'Bearer '+window.mrgoose.backendToken,'Content-Type':'application/json'},body:JSON.stringify({title:'UI smoke fixture',summary:'s',whenItWorks:'keep-this',example:'e',tags:'indirect'})}).then(r=>r.json()).then(t=>t.id)");
   check(!!techId, 'created a technique fixture via the API');
   await browser.evaluate(`fetch(window.mrgoose.backendUrl+'/api/control/organizer_run',{method:'POST',headers:{Authorization:'Bearer '+window.mrgoose.backendToken,'Content-Type':'application/json'},body:JSON.stringify({tool:'open_in_view',args:{kind:'technique',id:String(${techId})}})})`);

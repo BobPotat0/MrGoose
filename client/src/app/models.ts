@@ -33,6 +33,7 @@ export interface UsageInfo { hasKey: boolean; spentToday: number | null; balance
 export interface KnowledgeNote { id: number; title: string; content: string; }
 export interface OrganizerDoc { name: string; content: string; isCustom?: boolean; }
 export interface OrganizerSystem { prompt: string; isCustom: boolean; default: string; }
+export interface QuickActionDto { id: string; label: string; prompt: string; send: boolean; }
 
 export interface DossierState {
   id: number; scenarioCode: string; verdict: string; dossier: string;

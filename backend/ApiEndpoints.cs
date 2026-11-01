@@ -6,6 +6,8 @@ namespace MrGoose.Backend;
 
 public static class ApiEndpoints
 {
+    private static readonly System.Text.Json.JsonSerializerOptions JsonWeb = new(System.Text.Json.JsonSerializerDefaults.Web);
+
     public static void MapApi(this WebApplication app)
     {
         app.MapOrganizerFiles();
@@ -422,6 +424,31 @@ public static class ApiEndpoints
             var e = await db.Settings.FindAsync(Services.OrganizerService.SettingsKey); if (e is not null) { db.Settings.Remove(e); await db.SaveChangesAsync(); }
             return Results.Ok(new { prompt = Services.OrganizerService.System });
         });
+        // Editable librarian quick-actions (the buttons above the Organizer chat). Absent setting → the client
+        // shows its built-in defaults; once the operator adds/edits one, the whole list is persisted here.
+        app.MapGet("/api/organizer/quick-actions", async (MrGooseDb db) =>
+        {
+            var raw = (await db.Settings.FindAsync("organizer.quickactions"))?.Value;
+            if (string.IsNullOrWhiteSpace(raw)) return Results.Ok(new { actions = Array.Empty<OrganizerQuickActionDto>(), isCustom = false });
+            try
+            {
+                var actions = System.Text.Json.JsonSerializer.Deserialize<List<OrganizerQuickActionDto>>(raw, JsonWeb) ?? new();
+                return Results.Ok(new { actions, isCustom = true });
+            }
+            catch { return Results.Ok(new { actions = Array.Empty<OrganizerQuickActionDto>(), isCustom = false }); }
+        });
+        app.MapPut("/api/organizer/quick-actions", async (OrganizerQuickActionsDto dto, MrGooseDb db) =>
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(dto.Actions ?? new(), JsonWeb);
+            var e = await db.Settings.FindAsync("organizer.quickactions");
+            if (e is null) db.Settings.Add(new AppSetting { Key = "organizer.quickactions", Value = json }); else e.Value = json;
+            await db.SaveChangesAsync(); return Results.Ok();
+        });
+        app.MapDelete("/api/organizer/quick-actions", async (MrGooseDb db) =>
+        {
+            var e = await db.Settings.FindAsync("organizer.quickactions"); if (e is not null) { db.Settings.Remove(e); await db.SaveChangesAsync(); }
+            return Results.Ok();
+        });
         app.MapGet("/api/organizer/docs", async (MrGooseDb db) =>
         {
             var ov = (await db.Settings.ToListAsync()).Where(s => s.Key.StartsWith("doc.")).ToDictionary(s => s.Key, s => s.Value);
@@ -553,6 +580,8 @@ public static class ApiEndpoints
     public record AiEditDto(string Body, string Instruction);
     public record OrganizerSystemDto(string Prompt);
     public record OrganizerDocDto(string Name, string Content);
+    public record OrganizerQuickActionsDto(List<OrganizerQuickActionDto> Actions);
+    public record OrganizerQuickActionDto(string Id, string Label, string Prompt, bool Send);
     public record EncodeDto(string? Scheme, string[]? Keys, bool Marked, string Text);
     public class PromptImport { public List<PromptFolder>? Folders { get; set; } public List<Prompt>? Prompts { get; set; } }
 }

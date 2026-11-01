@@ -9,7 +9,20 @@ import { OrganizerFilesComponent } from '../organizer-files.component';
 import { InspectorComponent } from '../inspector.component';
 import { InspectorStore } from '../inspector.store';
 import { ModelSettingsComponent } from '../model-settings.component';
-import { KnowledgeNote, OrganizerDoc, OrganizerFileInfo } from '../models';
+import { KnowledgeNote, OrganizerDoc, OrganizerFileInfo, QuickActionDto } from '../models';
+
+// Built-in librarian quick-actions. Shown until the operator customises them (add / right-click edit),
+// after which the whole list is persisted server-side; "reset to default" restores these.
+const DEFAULT_QUICK_ACTIONS: QuickActionDto[] = [
+  { id: 'find-techniques', label: '✦ Find techniques', send: true, prompt: "Search the web for new, currently-effective jailbreak / IPI techniques we don't already have. Add each strong one with create_technique (concise summary, when-it-works, a short example, tags direct/indirect/encoding). Skip duplicates; tell me what you added." },
+  { id: 'extract-sources', label: '📄 Extract from sources', send: true, prompt: "List the Source library, read each document, and extract any jailbreak / IPI techniques we don't already have into the Technique library (create_technique, tagged). Say what you pulled from which source." },
+  { id: 'dedupe', label: '🧹 Dedupe', send: true, prompt: 'Dedupe the technique library (remove duplicate user techniques; keep built-ins). Report how many you removed.' },
+  { id: 'tidy-prompts', label: '🗂 Tidy prompts', send: true, prompt: 'Review the prompt library: suggest and apply sensible folders and tags, and flag near-duplicate prompts to merge. Make safe changes and list what you did.' },
+  { id: 'suggest-tags', label: '🏷 Suggest tags', send: true, prompt: 'Check the techniques for missing or wrong tags and fix them using the existing tag registry (add a new tag only if clearly needed). List the changes.' },
+  { id: 'show-techniques', label: '📚 Show techniques', send: true, prompt: 'Show the technique library.' },
+  { id: 'new-scenario', label: '➕ New scenario', send: false, prompt: 'Create a new scenario from this spec — fill objective, success criteria, injection surfaces/fields and markers:\n\n' },
+  { id: 'add-knowledge', label: '📝 Add knowledge', send: false, prompt: 'Add this as an operator knowledge note:\n\n' },
+];
 
 @Component({
   selector: 'mg-assistant',
@@ -106,10 +119,25 @@ import { KnowledgeNote, OrganizerDoc, OrganizerFileInfo } from '../models';
       @if (orgMode() === 'direct') {
       <div class="agent-chat-column">
       <div class="row quick-actions" style="gap: 6px; flex-wrap: wrap; margin-bottom: 8px">
-        @for (a of quickActions; track a.label) {
-          <button class="btn" style="font-size: 11px" (click)="quick(a)" [disabled]="chat.streaming() || chat.uploading()" [title]="a.send ? 'Runs now' : 'Fills the box — add your text, then send'">{{ a.label }}</button>
+        @for (a of quickActions(); track a.id) {
+          <button class="btn" style="font-size: 11px" (click)="quick(a)" (contextmenu)="editAction($event, a)" [disabled]="chat.streaming() || chat.uploading()" [title]="(a.send ? 'Runs now' : 'Fills the box — add your text, then send') + ' · right-click to edit'">{{ a.label }}</button>
         }
+        <button class="btn ghost" style="font-size: 11px" type="button" (click)="addAction()" [disabled]="chat.streaming() || chat.uploading()" title="Add a custom quick-action">+ add</button>
       </div>
+      @if (editing()) {
+        <div class="card alt qa-editor" style="margin-bottom: 10px">
+          <div class="row spread"><span class="label-mono">{{ isNewAction() ? 'New quick-action' : 'Edit quick-action' }}</span><button class="btn ghost" type="button" (click)="cancelEdit()">Close</button></div>
+          <input class="input" style="margin-top: 8px" [(ngModel)]="editDraft.label" placeholder="Button label (e.g. ✦ Find techniques)" />
+          <textarea class="textarea" style="min-height: 120px; margin-top: 8px" [(ngModel)]="editDraft.prompt" placeholder="The prompt this button sends / fills"></textarea>
+          <label class="row" style="margin-top: 8px; gap: 6px; font-size: 12px"><input type="checkbox" [(ngModel)]="editDraft.send" /> Runs immediately on click (otherwise just fills the box for you to finish)</label>
+          <div class="row" style="margin-top: 10px; gap: 6px">
+            <button class="btn primary" type="button" (click)="saveEdit()" [disabled]="!editDraft.label.trim() || !editDraft.prompt.trim()">Save</button>
+            @if (!isNewAction()) { <button class="btn danger" type="button" (click)="deleteEdit()">Delete</button> }
+            <span class="grow"></span>
+            <button class="btn" type="button" (click)="resetActions()" title="Restore the built-in quick-actions">reset all to default</button>
+          </div>
+        </div>
+      }
       <div #thread class="card agent-thread">
         @for (v of chat.view(); track $index) {
           @if (v.type==='file' && v.file) {
@@ -275,6 +303,7 @@ export class OrganizerPage implements OnDestroy {
 
   constructor() {
     this.loadAgentConfig();
+    void this.loadQuickActions();
     // Keep the backend's active organizer session in sync so MCP file tools follow the session the
     // operator is on — on mode switch AND whenever the active session changes while MCP is enabled.
     effect(() => { const id = this.chat.activeId(); if (this.orgMode() === 'mcp') void this.api.setOrganizerSession(id); });
@@ -298,22 +327,48 @@ export class OrganizerPage implements OnDestroy {
   }
 
   // Librarian quick-actions: each drops a ready prompt into the composer. `send` ones run immediately;
-  // the others pre-fill (they need your spec/note) and focus the box.
-  readonly quickActions = [
-    { label: '✦ Find techniques', send: true, prompt: "Search the web for new, currently-effective jailbreak / IPI techniques we don't already have. Add each strong one with create_technique (concise summary, when-it-works, a short example, tags direct/indirect/encoding). Skip duplicates; tell me what you added." },
-    { label: '📄 Extract from sources', send: true, prompt: "List the Source library, read each document, and extract any jailbreak / IPI techniques we don't already have into the Technique library (create_technique, tagged). Say what you pulled from which source." },
-    { label: '🧹 Dedupe', send: true, prompt: 'Dedupe the technique library (remove duplicate user techniques; keep built-ins). Report how many you removed.' },
-    { label: '🗂 Tidy prompts', send: true, prompt: 'Review the prompt library: suggest and apply sensible folders and tags, and flag near-duplicate prompts to merge. Make safe changes and list what you did.' },
-    { label: '🏷 Suggest tags', send: true, prompt: 'Check the techniques for missing or wrong tags and fix them using the existing tag registry (add a new tag only if clearly needed). List the changes.' },
-    { label: '📚 Show techniques', send: true, prompt: 'Show the technique library.' },
-    { label: '➕ New scenario', send: false, prompt: 'Create a new scenario from this spec — fill objective, success criteria, injection surfaces/fields and markers:\n\n' },
-    { label: '📝 Add knowledge', send: false, prompt: 'Add this as an operator knowledge note:\n\n' },
-  ];
-  quick(a: { prompt: string; send: boolean }) {
+  // the others pre-fill (they need your spec/note) and focus the box. Editable (+ add / right-click) and
+  // persisted server-side once customised — see loadQuickActions / persistQuickActions.
+  readonly quickActions = signal<QuickActionDto[]>(DEFAULT_QUICK_ACTIONS.map(a => ({ ...a })));
+  readonly editing = signal<string | null>(null);   // id of the action being edited, or null
+  readonly isNewAction = signal(false);
+  editDraft: QuickActionDto = { id: '', label: '', prompt: '', send: false };
+
+  quick(a: QuickActionDto) {
     if (this.chat.streaming() || this.chat.uploading()) return;
     this.input = a.prompt;
     if (a.send) this.send();
     else this.composer?.nativeElement.focus();
+  }
+  editAction(ev: MouseEvent, a: QuickActionDto) { ev.preventDefault(); this.editDraft = { ...a }; this.isNewAction.set(false); this.editing.set(a.id); }
+  addAction() { this.editDraft = { id: crypto.randomUUID(), label: '', prompt: '', send: false }; this.isNewAction.set(true); this.editing.set(this.editDraft.id); }
+  cancelEdit() { this.editing.set(null); }
+  async saveEdit() {
+    const d: QuickActionDto = { ...this.editDraft, label: this.editDraft.label.trim(), prompt: this.editDraft.prompt };
+    if (!d.label || !d.prompt.trim()) return;
+    this.quickActions.update(list => { const i = list.findIndex(x => x.id === d.id); if (i >= 0) { const n = [...list]; n[i] = d; return n; } return [...list, d]; });
+    this.editing.set(null);
+    await this.persistQuickActions();
+  }
+  async deleteEdit() {
+    const id = this.editing(); if (!id) return;
+    this.quickActions.update(list => list.filter(x => x.id !== id));
+    this.editing.set(null);
+    await this.persistQuickActions();
+  }
+  async resetActions() {
+    try { await this.api.resetOrganizerQuickActions(); } catch { /* backend down */ }
+    this.quickActions.set(DEFAULT_QUICK_ACTIONS.map(a => ({ ...a })));
+    this.editing.set(null);
+    this.toast.ok('quick-actions reset to default');
+  }
+  private async persistQuickActions() {
+    try { await this.api.setOrganizerQuickActions(this.quickActions()); this.toast.ok('quick-actions saved'); }
+    catch { this.toast.err('could not save quick-actions'); }
+  }
+  private async loadQuickActions() {
+    try { const r = await this.api.organizerQuickActions(); if (r.isCustom) this.quickActions.set(r.actions); }
+    catch { /* backend down → keep the built-in defaults */ }
   }
   composerKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.isComposing) {

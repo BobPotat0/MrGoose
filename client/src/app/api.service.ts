@@ -6,7 +6,7 @@ import {
   SubmissionDto, SettingsDto, DossierState, BuildingBlockDto, BreakItem, PromptSelection,
   ScenarioDto, FinderSummary, ChatSessionDto, ChatTurnDto, JudgeResult, FolderDto,
   KnowledgeNote, OrganizerDoc, OrganizerSystem, KeyInfo, ModelInfo, UsageInfo, OrganizerFileInfo, OrganizerFileContent,
-  SourceLinkDto, SourceDocDto,
+  SourceLinkDto, SourceDocDto, QuickActionDto,
 } from './models';
 
 /** Typed REST wrapper over the C# backend. Methods return Promises for easy async/await in pages. */
@@ -115,6 +115,9 @@ export class ApiService {
   resetDoc(name: string) { return firstValueFrom(this.http.delete(this.url(`/api/organizer/docs/${encodeURIComponent(name)}`))); }
   resetDocs() { return firstValueFrom(this.http.post(this.url('/api/organizer/docs/reset'), {})); }
   setOrganizerSession(sessionId: string) { return firstValueFrom(this.http.put(this.url('/api/organizer/active-session'), { sessionId })); }
+  organizerQuickActions() { return firstValueFrom(this.http.get<{ actions: QuickActionDto[]; isCustom: boolean }>(this.url('/api/organizer/quick-actions'))); }
+  setOrganizerQuickActions(actions: QuickActionDto[]) { return firstValueFrom(this.http.put(this.url('/api/organizer/quick-actions'), { actions })); }
+  resetOrganizerQuickActions() { return firstValueFrom(this.http.delete(this.url('/api/organizer/quick-actions'))); }
   knowledge() { return firstValueFrom(this.http.get<KnowledgeNote[]>(this.url('/api/knowledge'))); }
   addKnowledge(n: Partial<KnowledgeNote>) { return firstValueFrom(this.http.post<KnowledgeNote>(this.url('/api/knowledge'), n)); }
   updateKnowledge(id: number, n: Partial<KnowledgeNote>) { return firstValueFrom(this.http.put<KnowledgeNote>(this.url(`/api/knowledge/${id}`), n)); }
