@@ -595,6 +595,11 @@
           </div>
           <span class="dim" style="font-size: 11px">{{ craftMode() === 'mcp' ? 'Your external Claude/GPT crafts via MCP' : 'Mr Goose Attacker crafts via OpenRouter' }}</span>
         </div>
+        <div class="row" style="gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center">
+          <span class="mono" style="font-size: 11.5px; color: var(--lime)">{{ modelName || '(no model)' }} × {{ scenarioCode }}</span>
+          @if (dossier()?.verdict) { <span class="chip" [class.lime]="dossier()?.verdict === 'break'">{{ dossier()?.verdict }}</span> }
+          @if (dossier()?.scaffold) { <span class="chip" title="Harness / scaffold">{{ dossier()?.scaffold }}</span> }
+        </div>
         <div class="card source-card">
           <div class="row spread">
             <h2>Craft context</h2>
@@ -970,6 +975,12 @@
               Captured victim tools — insert a call notation into the message, or forge a
               tool-result block.
             </p>
+            <div class="label-mono" style="margin: 6px 0 2px">Generic formats (no capture needed)</div>
+            <div class="row" style="flex-wrap: wrap; gap: 6px">
+              @for (f of toolFormats; track f.label) {
+                <button class="btn mono" style="font-size: 11px" (click)="insertBlock(f.t)">{{ f.label }}</button>
+              }
+            </div>
             @for (t of dossier()?.tools ?? []; track t.id) {
               <div class="card" style="margin-top: 8px; padding: 10px">
                 <div class="row spread">

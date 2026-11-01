@@ -16,7 +16,7 @@ public record AttackerSendRequest(string ScenarioCode, string ModelName, string 
 /// </summary>
 public sealed class CockpitHub(MrGooseDb db, OpenRouterClient openRouter, AttackerService craft, FinderService finder, OrganizerService agent) : Hub
 {
-    private const int MaxRounds = 6;
+    private const int MaxRounds = 12;   // match TENEBRIS: allow deeper analyze/craft tool-loops
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string RequestId, CancellationTokenSource Cancellation)> Attacks = new();
 
     // pending client-mediated page actions for the Mr Goose Organizer (keyed by action id)
