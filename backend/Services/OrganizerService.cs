@@ -90,6 +90,7 @@ public class OrganizerService(MrGooseDb db, AttackerService craft, OpenRouterCli
         Fn("update_technique", "Update a user technique by id (built-ins are read-only).", new JsonObject { ["id"] = P("number", ""), ["title"] = P("string", ""), ["summary"] = P("string", ""), ["whenItWorks"] = P("string", ""), ["example"] = P("string", ""), ["tags"] = P("string", "") }, "id");
         Fn("delete_technique", "Delete a user technique by id (built-ins cannot be deleted).", new JsonObject { ["id"] = P("number", "") }, "id");
         Fn("reset_techniques", "Restore the built-in technique catalog (keeps user techniques).", O());
+        Fn("dedupe_techniques", "Remove duplicate user techniques (keep the first per title; built-ins kept).", O());
         Fn("list_technique_tags", "List the technique tag registry.", O());
         Fn("save_technique_tag", "Create or update a technique tag (by key).", new JsonObject { ["key"] = P("string", ""), ["color"] = P("string", "hex, e.g. #b6f23d"), ["description"] = P("string", "") }, "key");
         Fn("delete_technique_tag", "Delete a technique tag by id.", new JsonObject { ["id"] = P("number", "") }, "id");
@@ -238,6 +239,13 @@ public class OrganizerService(MrGooseDb db, AttackerService craft, OpenRouterCli
             }
             case "delete_technique": { var t = await db.Techniques.FindAsync(I("id")); if (t is null) return "not found"; if (t.Builtin) return "built-in techniques cannot be deleted"; db.Techniques.Remove(t); await db.SaveChangesAsync(); return "deleted"; }
             case "reset_techniques": return $"restored {TechniqueDefaults.EnsureBuiltins(db)} built-ins";
+            case "dedupe_techniques":
+            {
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase); var removed = 0;
+                foreach (var t in (await db.Techniques.ToListAsync()).OrderBy(t => t.Id))
+                    if (!seen.Add(t.Title.Trim()) && !t.Builtin) { db.Techniques.Remove(t); removed++; }
+                await db.SaveChangesAsync(); return $"removed {removed} duplicate(s)";
+            }
             case "list_technique_tags": return Json((await db.TechniqueTags.OrderBy(t => t.Key).ToListAsync()).Select(t => new { t.Id, t.Key, t.Color, t.Description }));
             case "save_technique_tag":
             {

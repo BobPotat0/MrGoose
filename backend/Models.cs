@@ -237,6 +237,7 @@ public class Technique
     public string Example { get; set; } = "";
     public string Tags { get; set; } = "";             // csv of TechniqueTag.Key
     public bool Builtin { get; set; }                   // seeded catalog entry (badge + reset target)
+    public bool RequiresEncoding { get; set; }          // relies on the encoding pipeline (encoder hint when selected)
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 

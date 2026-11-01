@@ -867,6 +867,9 @@
           }
 
           @if (overlay() === 'techs') {
+            @if (selectedNeedsEncoding()) {
+              <div class="banner" style="margin: 0 0 8px">⚡ A selected technique needs the encoding pipeline — open <strong>Encode</strong> and set a chain (or [ENC] markers) before filling.</div>
+            }
             @for (t of techniques(); track t.id) {
               <label class="row" style="gap: 8px; margin-top: 7px; align-items: flex-start"
                 ><input
@@ -878,6 +881,9 @@
                   ><strong style="font-size: 12.5px">{{ t.title }}</strong>
                   @if (t.tags) {
                     <span class="mono dim" style="font-size: 11px"> · {{ t.tags }}</span>
+                  }
+                  @if (t.requiresEncoding) {
+                    <span class="mono" style="font-size: 11px; color: #38bdf8"> · ⚡enc</span>
                   }
                   @if (t.summary) {
                     <p class="dim" style="font-size: 11px; margin: 2px 0 0">{{ t.summary }}</p>

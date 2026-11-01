@@ -53,6 +53,7 @@ export class ApiService {
   updateTechnique(id: number, t: Partial<TechniqueDto>) { return firstValueFrom(this.http.put<TechniqueDto>(this.url(`/api/techniques/${id}`), t)); }
   deleteTechnique(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/techniques/${id}`))); }
   resetTechniques() { return firstValueFrom(this.http.post<{ written: number }>(this.url('/api/techniques/reset'), {})); }
+  dedupeTechniques() { return firstValueFrom(this.http.post<{ removed: number }>(this.url('/api/techniques/dedupe'), {})); }
   exportTechniques() { return firstValueFrom(this.http.get<TechniqueDto[]>(this.url('/api/techniques/export'))); }
   importTechniques(items: TechniqueDto[]) { return firstValueFrom(this.http.post<{ imported: number }>(this.url('/api/techniques/import'), items)); }
   techniqueTags() { return firstValueFrom(this.http.get<TechniqueTagDto[]>(this.url('/api/technique-tags'))); }

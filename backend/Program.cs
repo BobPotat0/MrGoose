@@ -71,6 +71,7 @@ using (var scope = app.Services.CreateScope())
     // lightweight column add for existing DBs (EnsureCreated won't migrate) — keeps the operator's data
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN WaveBreaksJson TEXT NOT NULL DEFAULT '{}'"); } catch { /* column already exists */ }
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Models ADD COLUMN Wave TEXT NOT NULL DEFAULT ''"); } catch { /* column already exists */ }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE Techniques ADD COLUMN RequiresEncoding INTEGER NOT NULL DEFAULT 0"); } catch { /* column already exists */ }
     Seeder.Run(db);
     TechniqueDefaults.EnsureBuiltins(db, overwrite: false);   // ensure built-ins + tags exist, but preserve operator edits (reset restores defaults)
     DesktopData.MarkVersion(dbPath, builder.Configuration["MRGOOSE_APP_VERSION"]);

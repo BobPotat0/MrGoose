@@ -168,7 +168,7 @@ public static class ApiEndpoints
         {
             var e = await db.Techniques.FindAsync(id); if (e is null) return Results.NotFound();
             e.Title = t.Title; e.Summary = t.Summary; e.WhenItWorks = t.WhenItWorks; e.Example = t.Example;
-            e.Tags = t.Tags;   // slug/builtin are immutable
+            e.Tags = t.Tags; e.RequiresEncoding = t.RequiresEncoding;   // slug/builtin are immutable
             await db.SaveChangesAsync(); return Results.Ok(e);
         });
         app.MapDelete("/api/techniques/{id:int}", async (int id, MrGooseDb db) =>
@@ -178,6 +178,14 @@ public static class ApiEndpoints
         });
         // restore the built-in catalog by slug (keeps user-added techniques)
         app.MapPost("/api/techniques/reset", (MrGooseDb db) => Results.Ok(new { written = TechniqueDefaults.EnsureBuiltins(db) }));
+        // drop duplicate user techniques (keep the first per title, case-insensitive; built-ins never removed)
+        app.MapPost("/api/techniques/dedupe", async (MrGooseDb db) =>
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase); var removed = 0;
+            foreach (var t in (await db.Techniques.ToListAsync()).OrderBy(t => t.Id))
+                if (!seen.Add(t.Title.Trim()) && !t.Builtin) { db.Techniques.Remove(t); removed++; }
+            await db.SaveChangesAsync(); return Results.Ok(new { removed });
+        });
         // export / import the technique library (JSON)
         app.MapGet("/api/techniques/export", async (MrGooseDb db) => Results.Ok(await db.Techniques.ToListAsync()));
         app.MapPost("/api/techniques/import", async (List<Technique> items, MrGooseDb db) =>
@@ -186,8 +194,8 @@ public static class ApiEndpoints
             foreach (var t in items)
             {
                 var existing = !string.IsNullOrEmpty(t.Slug) ? await db.Techniques.FirstOrDefaultAsync(x => x.Slug == t.Slug) : null;
-                if (existing is not null) { existing.Title = t.Title; existing.Summary = t.Summary; existing.WhenItWorks = t.WhenItWorks; existing.Example = t.Example; existing.Tags = t.Tags; }
-                else { db.Techniques.Add(new Technique { Title = t.Title, Summary = t.Summary, WhenItWorks = t.WhenItWorks, Example = t.Example, Tags = t.Tags }); }
+                if (existing is not null) { existing.Title = t.Title; existing.Summary = t.Summary; existing.WhenItWorks = t.WhenItWorks; existing.Example = t.Example; existing.Tags = t.Tags; existing.RequiresEncoding = t.RequiresEncoding; }
+                else { db.Techniques.Add(new Technique { Title = t.Title, Summary = t.Summary, WhenItWorks = t.WhenItWorks, Example = t.Example, Tags = t.Tags, RequiresEncoding = t.RequiresEncoding }); }
                 n++;
             }
             await db.SaveChangesAsync(); return Results.Ok(new { imported = n });

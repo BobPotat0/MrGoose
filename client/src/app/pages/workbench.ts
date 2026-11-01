@@ -50,6 +50,8 @@ export class WorkbenchPage {
   readonly promptRefs = signal<PromptDto[]>([]);
   readonly markers = signal<MarkerDto[]>([]);
   readonly selTechs = signal<Set<number>>(new Set());
+  // A selected technique flags RequiresEncoding but no encoder chain is set → hint the operator to encode.
+  readonly selectedNeedsEncoding = computed(() => this.techniques().some(t => this.selTechs().has(t.id) && t.requiresEncoding) && this.encKeys().length === 0 && !this.encMarked);
   readonly selBlocks = signal<Set<number>>(new Set());
   readonly selBreaks = signal<Set<string>>(new Set());
   readonly overlay = signal<Overlay>('');

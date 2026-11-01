@@ -167,6 +167,11 @@ export class TechniquesPage {
     await this.load();
     this.toast.ok(`restored ${r.written} built-ins`);
   }
+  async dedupe() {
+    const r = await this.api.dedupeTechniques();
+    await this.load();
+    this.toast.ok(r.removed ? `removed ${r.removed} duplicate(s)` : 'no duplicates');
+  }
   async export() {
     const data = await this.api.exportTechniques();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

@@ -104,7 +104,7 @@ public class AttackerService(MrGooseDb db)
             {
                 sb.AppendLine();
                 sb.AppendLine("## Techniques to weave in — study each to apply the move (do NOT quote verbatim):");
-                foreach (var t in techs) { sb.AppendLine($"### {t.Title}"); if (!string.IsNullOrWhiteSpace(t.Summary)) sb.AppendLine(t.Summary); if (!string.IsNullOrWhiteSpace(t.Example)) { sb.AppendLine("Example:"); sb.AppendLine(t.Example); } sb.AppendLine(); }
+                foreach (var t in techs) { sb.AppendLine($"### {t.Title}{(t.RequiresEncoding ? " (requires the encoding pipeline — the operator encodes the payload before filling)" : "")}"); if (!string.IsNullOrWhiteSpace(t.Summary)) sb.AppendLine(t.Summary); if (!string.IsNullOrWhiteSpace(t.Example)) { sb.AppendLine("Example:"); sb.AppendLine(t.Example); } sb.AppendLine(); }
             }
         }
         if (scen is not null && scen.Markers.Count > 0)

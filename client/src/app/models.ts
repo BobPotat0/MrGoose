@@ -21,7 +21,7 @@ export interface StateDto { scenarioCode: string; verdict: string; dossier: stri
 
 export interface PromptDto { id: number; folderId: number | null; title: string; body: string; tags: string; scenarioCode: string; surface: string; markers: string; source: string; verdict: string; followUpsJson: string; createdAt: string; }
 export interface FolderDto { id: number; parentId: number | null; name: string; }
-export interface TechniqueDto { id: number; slug: string; title: string; summary: string; whenItWorks: string; example: string; tags: string; builtin: boolean; }
+export interface TechniqueDto { id: number; slug: string; title: string; summary: string; whenItWorks: string; example: string; tags: string; builtin: boolean; requiresEncoding?: boolean; }
 export interface TechniqueTagDto { id: number; key: string; color: string; description: string; }
 export interface EncodingTransform { key: string; name: string; category: string; }
 export interface SubmissionDto { id: number; externalId: string; scenarioCode: string; modelName: string; payloadJson: string; status: string; isBreak: boolean; submittedAt: string; }

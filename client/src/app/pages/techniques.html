@@ -14,6 +14,7 @@
           <button class="btn" (click)="tagEditor.set(!tagEditor())">Manage tags</button
           ><button class="btn" (click)="export()">Export JSON</button
           ><button class="btn" (click)="importInput.click()">Import JSON</button
+          ><button class="btn" (click)="dedupe()">Dedupe</button
           ><button class="btn danger" (click)="reset()">Reset built-ins</button>
         </div>
       </details>
@@ -125,6 +126,10 @@
           </button>
         }
       </div>
+      <label class="row" style="gap: 8px; margin-top: 6px; align-items: center; cursor: pointer">
+        <input type="checkbox" name="requiresEncoding" [(ngModel)]="draft.requiresEncoding" />
+        <span>Requires the encoding pipeline <span class="dim">(hints to encode the payload before filling)</span></span>
+      </label>
       <div class="row editor-actions">
         <button type="button" class="btn" (click)="resetDraft()" [disabled]="saving()">
           Cancel</button
@@ -202,6 +207,7 @@
               @for (key of tagList(t); track key) {
                 <span class="chip" [style.color]="tagColor(key)">{{ key }}</span>
               }
+              @if (t.requiresEncoding) { <span class="chip" style="color: #38bdf8" title="Relies on the encoding pipeline">⚡ encoding</span> }
             </div>
           </button>
         } @empty {
