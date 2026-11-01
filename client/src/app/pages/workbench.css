@@ -347,6 +347,31 @@
 .record-actions {
   justify-content: space-between;
 }
+.batch-actions {
+  display: flex;
+  flex-direction: column;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.batch-actions .btn {
+  padding: 6px 9px;
+  font-size: 11px;
+}
+.batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  max-height: 150px;
+  overflow: auto;
+}
+.batch-row {
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--surface-3);
+  border-radius: 6px;
+  background: var(--surface-1);
+}
 .verdict-break {
   color: var(--green);
 }

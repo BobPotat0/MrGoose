@@ -745,6 +745,36 @@
                 placeholder="#chatTextarea"
             /></label>
           </details>
+          <div class="batch-actions">
+            <div class="row spread">
+              <span class="label-mono">Batch — multi-tab</span>
+              @if (batchBusy()) { <span class="mono dim" style="font-size: 11px">{{ batchBusy() }}</span> }
+            </div>
+            <div class="row" style="gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px">
+              <label class="row" style="gap: 4px; align-items: center; font-size: 12px">tabs<input
+                class="input" type="number" min="1" max="8" [(ngModel)]="batchCount" style="width: 54px" /></label>
+              <button class="btn" (click)="addCurrentToBatch()" [disabled]="!!batchBusy()">+ add current</button
+              ><button class="btn" (click)="addCopies()" [disabled]="!!batchBusy()">× N copies</button
+              ><button class="btn" (click)="generateVariants()" [disabled]="streaming() || !!batchBusy()">Generate N variants</button>
+            </div>
+            @if (batch().length) {
+              <div class="batch-list">
+                @for (e of batch(); track e.id) {
+                  <div class="row spread batch-row">
+                    <span class="mono dim" style="font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ e.label }} · {{ batchPreview(e.payload) }}</span>
+                    <a (click)="removeBatchEntry(e.id)" title="Remove from batch" style="cursor: pointer">✕</a>
+                  </div>
+                }
+              </div>
+              <div class="row" style="gap: 6px; margin-top: 6px">
+                <button class="btn primary" (click)="fillBatch()" [disabled]="!arena.available || !!batchBusy()">Fill batch → {{ batch().length }} tab(s)</button
+                ><button class="btn" (click)="clearBatch()" [disabled]="!!batchBusy()">Clear</button>
+              </div>
+              <p class="dim" style="font-size: 11px; margin-top: 4px">Opens fresh arena tabs and fills only — you launch/submit each tab manually.</p>
+            } @else {
+              <p class="dim" style="font-size: 11px; margin-top: 4px">Add the current craft (or ×N copies / generated variants), then fill each into its own fresh arena tab. Submit stays manual.</p>
+            }
+          </div>
           <div class="record-actions">
             <span class="label-mono">Record verdict</span>
             <div class="row">
