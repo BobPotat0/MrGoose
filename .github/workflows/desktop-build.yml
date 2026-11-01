@@ -50,6 +50,8 @@ jobs:
         run: dotnet run --project tests/AgentToolsSmoke/AgentToolsSmoke.csproj -c Debug
       - name: Backend streaming cancellation check
         run: dotnet run --project tests/AttackerCancellationSmoke/AttackerCancellationSmoke.csproj -c Debug
+      - name: Whole-app UI smoke (dev build over CDP)
+        run: dotnet build backend/MrGoose.Backend.csproj -c Debug && npm --prefix client run build && node tests/ui-smoke.cjs
       - name: Build package (never publishes)
         run: node scripts/build-desktop.cjs ${{ matrix.platform }} ${{ matrix.arch }}
         env:
