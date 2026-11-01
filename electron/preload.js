@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('mrgoose', {
     snapshotConversation: (tabId, selector) => ipcRenderer.invoke('mrgoose:snapshotConversation', { tabId, selector }),
     highlightSendButton: (tabId, selector) => ipcRenderer.invoke('mrgoose:highlightSendButton', { tabId, selector }),
     pickElement: (tabId) => ipcRenderer.invoke('mrgoose:pickElement', { tabId }),
+    inspectPage: (tabId) => ipcRenderer.invoke('mrgoose:inspectPage', { tabId }),
     // NO sendMessage / launch / submit — by design.
   },
 });

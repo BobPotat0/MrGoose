@@ -96,8 +96,12 @@ export interface MrGooseApi {
     snapshotConversation(tabId: string, selector?: string): Promise<BridgeResult>;
     highlightSendButton(tabId: string, selector: string): Promise<BridgeResult>;
     pickElement(tabId: string): Promise<BridgeResult>;
+    inspectPage(tabId: string): Promise<PageInspect>;
   };
 }
+
+export interface PageField { tag: string; type: string; id: string; name: string; label: string; editable: boolean; selector: string; }
+export interface PageInspect extends BridgeResult { fields?: PageField[]; }
 
 declare global {
   interface Window { mrgoose?: MrGooseApi; }

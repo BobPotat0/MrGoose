@@ -773,15 +773,14 @@
             } @empty { <p class="dim" style="font-size: 11px; margin-top: 6px">No surfaces — click "+ surface" (this scenario may declare none).</p> }
             <div class="row" style="gap: 6px; margin-top: 8px; flex-wrap: wrap; align-items: center">
               <button class="btn primary" (click)="craftAttack()" [disabled]="streaming() || !!batchBusy()">✦ Craft Attack</button
-              ><button class="btn" (click)="applyReply()" [disabled]="streaming()">⇥ Apply reply</button
-              ><button class="btn" (click)="fillPrimary()" [disabled]="!arena.available || !builderPrimary()">Fill primary →</button>
+              ><button class="btn primary" (click)="fillWebsite()" [disabled]="!arena.available || !builderHasContent() || filling()">{{ filling() ? 'filling…' : '🌐 Fill website →' }}</button>
               <span class="grow"></span>
               <span class="dim" style="font-size: 11px">Record:</span>
               <button class="btn verdict-break" (click)="recordSubmission('break')" [disabled]="!builderHasContent()">Break</button
               ><button class="btn" (click)="recordSubmission('wall')" [disabled]="!builderHasContent()">Wall</button
               ><button class="btn" (click)="recordSubmission('partial')" [disabled]="!builderHasContent()">Partial</button>
             </div>
-            <p class="dim" style="font-size: 11px; margin-top: 4px">Per-field <strong>copy</strong> into the arena form (fill-only) — you launch/submit each yourself.</p>
+            <p class="dim" style="font-size: 11px; margin-top: 4px">The craft auto-loads here; <strong>Fill website</strong> drops every field into its matching arena field (fill-only) — you launch/submit yourself. Per-field <strong>copy</strong> is the manual fallback.</p>
             @if (craftSnaps().length) {
               <div class="row spread" style="margin-top: 8px"><span class="label-mono">Craft history</span><button class="btn" (click)="clearSnaps()">clear</button></div>
               @for (s of craftSnaps(); track s.id) {

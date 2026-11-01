@@ -109,7 +109,7 @@ function registerBridge() {
   handle('mrgoose:update:check', () => updater?.check());
   handle('mrgoose:update:download', () => updater?.download());
   handle('mrgoose:update:install', () => updater?.install());
-  for (const [channel, operation] of Object.entries({ fillField: 'fill', readDom: 'read', snapshotConversation: 'snapshot', highlightSendButton: 'highlight', pickElement: 'pick' })) {
+  for (const [channel, operation] of Object.entries({ fillField: 'fill', readDom: 'read', snapshotConversation: 'snapshot', highlightSendButton: 'highlight', pickElement: 'pick', inspectPage: 'inspect' })) {
     handle('mrgoose:' + channel, async ({ tabId, selector, value }) => {
       try {
         if (operation === 'fill' && arena.entry(tabId).attemptId) throw Object.assign(new Error('MCP attempt inputs are immutable; prepare a new attempt.'), { code: 'ATTEMPT_TAB_LOCKED' });

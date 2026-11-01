@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { ArenaTab, BridgeResult } from './models';
+import { ArenaTab, BridgeResult, PageInspect } from './models';
 
 const NOT_ELECTRON: BridgeResult = { ok: false, note: 'arena bridge only available in the Electron app' };
 
@@ -35,4 +35,6 @@ export class ArenaService {
   async snapshot(selector?: string, tabId?: string): Promise<BridgeResult> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.snapshotConversation(id, selector) : NOT_ELECTRON; }
   async highlight(selector: string, tabId?: string): Promise<BridgeResult> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.highlightSendButton(id, selector) : NOT_ELECTRON; }
   async pick(tabId?: string): Promise<BridgeResult> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.pickElement(id) : NOT_ELECTRON; }
+  // Inspect the live page's editable fields (name/label/selector) so "Fill website" can map builder fields to them.
+  async inspect(tabId?: string): Promise<PageInspect> { const id = await this.target(tabId); return id && this.m ? this.m.bridge.inspectPage(id) : NOT_ELECTRON; }
 }
