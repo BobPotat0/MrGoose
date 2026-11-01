@@ -949,13 +949,27 @@
                 <button class="btn mono" style="font-size: 11px" (click)="insertIntoTemplate(e)">{{ e }}</button>
               }
             </div>
-            @if (blocks().length) {
-              <div class="label-mono" style="margin: 10px 0 4px">Reusable blocks</div>
-              @for (b of blocks(); track b.id) {
-                <button class="btn" style="display: block; width: 100%; text-align: left; margin-top: 6px" (click)="insertIntoTemplate(b.content)">
-                  <span class="chip">{{ b.type }}</span> <span class="dim" style="font-size: 11.5px">{{ b.content }}</span>
-                </button>
+            <div class="row spread" style="margin: 10px 0 4px"><span class="label-mono">Reusable blocks</span><button class="btn ghost" style="font-size: 11px" (click)="addBlock()">+ add block</button></div>
+            @for (b of blocks(); track b.id) {
+              @if (editingBlock() === b.id) {
+                <div class="card alt" style="margin-top: 6px">
+                  <input class="input" [(ngModel)]="blockDraft.type" placeholder="label (e.g. sandbox-header)" />
+                  <textarea class="textarea" style="min-height: 90px; margin-top: 6px" [(ngModel)]="blockDraft.content" placeholder="block text"></textarea>
+                  <div class="row" style="margin-top: 6px; gap: 6px"><button class="btn primary" (click)="saveBlock()" [disabled]="!blockDraft.content.trim()">Save</button><button class="btn danger" (click)="deleteBlock()">Delete</button><button class="btn" (click)="cancelBlock()">Cancel</button></div>
+                </div>
+              } @else {
+                <div class="row" style="gap: 6px; margin-top: 6px; align-items: stretch">
+                  <button class="btn grow" style="text-align: left" (click)="insertIntoTemplate(b.content)" (contextmenu)="editBlock($event, b)" title="Click to insert into the template · right-click to edit"><span class="chip">{{ b.type }}</span> <span class="dim" style="font-size: 11.5px">{{ b.content }}</span></button>
+                  <button class="btn" (click)="editBlock($event, b)" title="Edit this block">✎</button>
+                </div>
               }
+            }
+            @if (editingBlock() === 'new') {
+              <div class="card alt" style="margin-top: 6px">
+                <input class="input" [(ngModel)]="blockDraft.type" placeholder="label (e.g. sandbox-header)" />
+                <textarea class="textarea" style="min-height: 90px; margin-top: 6px" [(ngModel)]="blockDraft.content" placeholder="block text"></textarea>
+                <div class="row" style="margin-top: 6px; gap: 6px"><button class="btn primary" (click)="saveBlock()" [disabled]="!blockDraft.content.trim()">Save</button><button class="btn" (click)="cancelBlock()">Cancel</button></div>
+              </div>
             }
           }
 

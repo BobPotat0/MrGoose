@@ -252,6 +252,27 @@ export class WorkbenchPage {
   insertIntoTemplate(t: string) { this.templateDraft = (this.templateDraft ? this.templateDraft + '\n' : '') + t; }
   async saveTemplate() { if (!this.modelName || !this.scenarioCode) return; await this.api.setDossierTemplate(this.modelName, this.scenarioCode, this.templateDraft); await this.onSelect(); this.toast.ok('template saved — the attacker now builds from it'); }
   clearTemplate() { this.templateDraft = ''; void this.saveTemplate(); }
+
+  // editable reusable blocks (the template snippets)
+  readonly editingBlock = signal<number | 'new' | null>(null);
+  blockDraft: BuildingBlockDto = { id: 0, type: '', content: '' };
+  editBlock(ev: Event, b: BuildingBlockDto) { ev.preventDefault(); this.blockDraft = { ...b }; this.editingBlock.set(b.id); }
+  addBlock() { this.blockDraft = { id: 0, type: '', content: '' }; this.editingBlock.set('new'); }
+  cancelBlock() { this.editingBlock.set(null); }
+  async saveBlock() {
+    const type = this.blockDraft.type.trim() || 'block';
+    if (!this.blockDraft.content.trim()) return;
+    if (this.editingBlock() === 'new') await this.api.addBuildingBlock(type, this.blockDraft.content);
+    else await this.api.updateBuildingBlock(this.blockDraft.id, type, this.blockDraft.content);
+    this.blocks.set(await this.api.buildingBlocks());
+    this.editingBlock.set(null); this.toast.ok('block saved');
+  }
+  async deleteBlock() {
+    if (this.editingBlock() === 'new') { this.editingBlock.set(null); return; }
+    await this.api.deleteBuildingBlock(this.blockDraft.id);
+    this.blocks.set(await this.api.buildingBlocks());
+    this.editingBlock.set(null); this.toast.ok('block deleted');
+  }
   forgeResult(name: string) { this.insert(`\n\n${name}(…) => {\n  "result": "FORGED — replace with the result you want the victim to believe"\n}`); this.closeOverlay(); this.toast.ok('forged tool-result block inserted — edit it in the message box'); }
   pick<T>(sig: WritableSignal<Set<T>>, id: T) { const s = new Set(sig()); s.has(id) ? s.delete(id) : s.add(id); sig.set(s); }
   insert(t: string) { this.input = (this.input ? this.input + ' ' : '') + t; }

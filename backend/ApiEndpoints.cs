@@ -290,6 +290,22 @@ public static class ApiEndpoints
         { var e = await db.DossierInjections.FindAsync(id); if (e is null) return Results.NotFound(); db.DossierInjections.Remove(e); await db.SaveChangesAsync(); return Results.Ok(); });
 
         app.MapGet("/api/building-blocks", async (MrGooseDb db) => await db.BuildingBlocks.ToListAsync());
+        app.MapPost("/api/building-blocks", async (BuildingBlock b, MrGooseDb db) =>
+        {
+            b.Id = 0; b.Type = string.IsNullOrWhiteSpace(b.Type) ? "block" : b.Type.Trim();
+            db.BuildingBlocks.Add(b); await db.SaveChangesAsync(); return Results.Ok(b);
+        });
+        app.MapPut("/api/building-blocks/{id:int}", async (int id, BuildingBlock b, MrGooseDb db) =>
+        {
+            var e = await db.BuildingBlocks.FindAsync(id); if (e is null) return Results.NotFound();
+            e.Type = string.IsNullOrWhiteSpace(b.Type) ? "block" : b.Type.Trim(); e.Content = b.Content;
+            await db.SaveChangesAsync(); return Results.Ok(e);
+        });
+        app.MapDelete("/api/building-blocks/{id:int}", async (int id, MrGooseDb db) =>
+        {
+            var e = await db.BuildingBlocks.FindAsync(id); if (e is null) return Results.NotFound();
+            db.BuildingBlocks.Remove(e); await db.SaveChangesAsync(); return Results.Ok();
+        });
 
         // working-break picker items: recorded break injections + imported break submissions
         app.MapGet("/api/breaks", async (MrGooseDb db) =>

@@ -87,6 +87,9 @@ export class ApiService {
   delTool(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/dossier/tool/${id}`))); }
   delInjection(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/dossier/injection/${id}`))); }
   buildingBlocks() { return firstValueFrom(this.http.get<BuildingBlockDto[]>(this.url('/api/building-blocks'))); }
+  addBuildingBlock(type: string, content: string) { return firstValueFrom(this.http.post<BuildingBlockDto>(this.url('/api/building-blocks'), { type, content })); }
+  updateBuildingBlock(id: number, type: string, content: string) { return firstValueFrom(this.http.put(this.url(`/api/building-blocks/${id}`), { type, content })); }
+  deleteBuildingBlock(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/building-blocks/${id}`))); }
   breaks() { return firstValueFrom(this.http.get<BreakItem[]>(this.url('/api/breaks'))); }
   updateMarkers(code: string, tokens: string[]) { return firstValueFrom(this.http.put(this.url(`/api/scenarios/${code}/markers`), tokens)); }
 
