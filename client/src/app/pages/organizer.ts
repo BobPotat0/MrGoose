@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, ViewChild, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BackendService } from '../backend.service';
 import { ArenaService } from '../arena.service';
@@ -214,7 +214,7 @@ import { KnowledgeNote, OrganizerDoc, OrganizerFileInfo } from '../models';
     @media (max-width: 760px) { .agent-page { padding: 20px 16px; } .agent-heading { flex-basis: 100%; } .agent-actions { padding-top: 0; } }
   `],
 })
-export class OrganizerPage implements AfterViewInit, OnDestroy {
+export class OrganizerPage implements OnDestroy {
   backend = inject(BackendService);
   arena = inject(ArenaService);
   chat = inject(OrganizerChatStore);
@@ -227,13 +227,23 @@ export class OrganizerPage implements AfterViewInit, OnDestroy {
   readonly showFiles = signal(true);
   // Direct = in-app organizer chat. MCP = an external model drives the organizer; chat is hidden, Files + Inspector stay live.
   readonly orgMode = signal<'direct' | 'mcp'>((() => { try { return (localStorage.getItem('mg.orgMode') as 'direct' | 'mcp') || 'direct'; } catch { return 'direct'; } })());
-  setOrgMode(m: 'direct' | 'mcp') { this.orgMode.set(m); try { localStorage.setItem('mg.orgMode', m); } catch { /* */ } if (m === 'mcp') void this.api.setOrganizerSession(this.chat.activeId()); }
+  setOrgMode(m: 'direct' | 'mcp') { this.orgMode.set(m); try { localStorage.setItem('mg.orgMode', m); } catch { /* */ } }  // the effect() registers the active session when MCP is on
   readonly fileFocus = signal<{ sessionId: string; id: string } | null>(null);
   readonly renaming = signal(false);
   readonly modelLabel = signal('Configured model');
   titleDraft = '';
   @ViewChild('composer') composer?: ElementRef<HTMLTextAreaElement>;
-  @ViewChild('thread') threadRef?: ElementRef<HTMLElement>;
+  private threadEl?: HTMLElement;
+  // A setter (not ngAfterViewInit) so the stick-to-bottom wiring (re)attaches whenever the thread
+  // appears — e.g. when the operator switches from MCP mode (chat hidden) back to Direct.
+  @ViewChild('thread') set threadRef(ref: ElementRef<HTMLElement> | undefined) {
+    const el = ref?.nativeElement;
+    if (el === this.threadEl) return;
+    this.threadEl = el;
+    this.threadObserver?.disconnect();
+    this.threadObserver = undefined;
+    if (el) this.setupThread(el);
+  }
   private stick = true;
   private threadObserver?: MutationObserver;
 
@@ -246,15 +256,19 @@ export class OrganizerPage implements AfterViewInit, OnDestroy {
   readonly openDoc = signal('');
   sysPrompt = ''; kbTitle = ''; kbContent = '';
 
-  constructor() { this.loadAgentConfig(); if (this.orgMode() === 'mcp') void this.api.setOrganizerSession(this.chat.activeId()); }
+  constructor() {
+    this.loadAgentConfig();
+    // Keep the backend's active organizer session in sync so MCP file tools follow the session the
+    // operator is on — on mode switch AND whenever the active session changes while MCP is enabled.
+    effect(() => { const id = this.chat.activeId(); if (this.orgMode() === 'mcp') void this.api.setOrganizerSession(id); });
+  }
 
-  ngAfterViewInit() {
-    const el = this.threadRef?.nativeElement;
-    if (!el) return;
-    // Stick to the bottom as the chat grows; release when the operator scrolls up, re-engage at the bottom.
+  // Stick to the bottom as the chat grows; release when the operator scrolls up, re-engage at the bottom.
+  private setupThread(el: HTMLElement) {
     el.addEventListener('scroll', () => { this.stick = el.scrollHeight - el.scrollTop - el.clientHeight < 48; });
     this.threadObserver = new MutationObserver(() => { if (this.stick) el.scrollTop = el.scrollHeight; });
     this.threadObserver.observe(el, { childList: true, subtree: true, characterData: true });
+    this.stick = true;
     el.scrollTop = el.scrollHeight;
   }
   ngOnDestroy() { this.threadObserver?.disconnect(); }

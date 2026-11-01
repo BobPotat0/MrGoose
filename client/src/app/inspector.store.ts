@@ -44,8 +44,13 @@ export class InspectorStore {
   private focus(item: InspectorItem) {
     const items = this.items();
     const i = items.findIndex(x => x.key === item.key);
-    if (i >= 0) { const next = [...items]; next[i] = item; this.items.set(next); this.index.set(i); }
+    if (i >= 0) { if (items[i].data['blobUrl'] !== item.data['blobUrl']) this.revokeBlob(items[i]); const next = [...items]; next[i] = item; this.items.set(next); this.index.set(i); }
     else { this.items.set([...items, item]); this.index.set(items.length); }
+  }
+  // Source-doc PDFs are held as blob: object URLs; release them when the item is replaced or closed.
+  private revokeBlob(item?: InspectorItem) {
+    const u = item?.data['blobUrl'];
+    if (typeof u === 'string' && u.startsWith('blob:')) { try { URL.revokeObjectURL(u); } catch { /* ignore */ } }
   }
   patch(field: string, value: unknown) {
     const i = this.index(), items = this.items(); const cur = items[i]; if (!cur) return;
@@ -54,9 +59,9 @@ export class InspectorStore {
   prev() { if (this.count()) this.index.set((this.index() - 1 + this.count()) % this.count()); }
   next() { if (this.count()) this.index.set((this.index() + 1) % this.count()); }
   go(i: number) { if (i >= 0 && i < this.count()) this.index.set(i); }
-  closeAt(i: number) { const items = this.items().filter((_, k) => k !== i); this.items.set(items); if (this.index() >= items.length) this.index.set(Math.max(0, items.length - 1)); }
+  closeAt(i: number) { this.revokeBlob(this.items()[i]); const items = this.items().filter((_, k) => k !== i); this.items.set(items); if (this.index() >= items.length) this.index.set(Math.max(0, items.length - 1)); }
   closeCurrent() { this.closeAt(this.index()); }
-  closeAll() { this.items.set([]); this.index.set(0); }
+  closeAll() { this.items().forEach(x => this.revokeBlob(x)); this.items.set([]); this.index.set(0); }
 
   async openTechnique(id: string | number) {
     const t = (await this.api.techniques()).find(x => x.id === +id); if (!t) return;

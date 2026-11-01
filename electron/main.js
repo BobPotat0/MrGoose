@@ -49,6 +49,9 @@ let updater = null;
 // The arena browser is embedded in the cockpit by default; it can be detached into its own window.
 let arenaDocked = true;
 let dockedBounds = { x: 0, y: 0, width: 0, height: 0 };
+// True only while the Break-Workbench pane is mounted and positioning the docked view (it reports
+// visibility on mount/unmount). Guards against showing the embedded view over an unrelated page.
+let dockedHostMounted = false;
 
 // ───────────────────────── backend sidecar ─────────────────────────
 function backendExePath() {
@@ -95,7 +98,7 @@ function registerBridge() {
   handle('mrgoose:tabs:loadUrl', ({ tabId, url }) => arena.loadUrl(tabId, url));
   // Docked: the cockpit pane positions and shows the embedded view. Detached: the Arena window owns bounds.
   handle('mrgoose:tabs:setBounds', (rect) => { dockedBounds = rect; if (arenaDocked) arena.setBounds(rect); return true; });
-  handle('mrgoose:tabs:setVisible', ({ visible }) => { if (arenaDocked) arena.setVisible(visible); return true; });
+  handle('mrgoose:tabs:setVisible', ({ visible }) => { if (arenaDocked) { dockedHostMounted = !!visible; arena.setVisible(visible); } return true; });
   handle('mrgoose:arena:detach', () => detachArena());
   handle('mrgoose:arena:dock', () => dockArena());
   handle('mrgoose:arena:state', () => ({ docked: arenaDocked }));
@@ -178,7 +181,12 @@ async function showCockpit() {
 // Bring the arena forward on whichever surface currently hosts it.
 async function presentArena(tabId) {
   if (tabId) arena.select(tabId);
-  if (arenaDocked) { arena.setVisible(true); await showCockpit(); }
+  if (arenaDocked) {
+    // Only show the embedded view when the Break-Workbench pane is actually hosting it. Otherwise it would
+    // float at stale bounds over whatever page is open, so pop it into its own window instead (no overlay).
+    if (dockedHostMounted) { arena.setVisible(true); await showCockpit(); }
+    else await detachArena();
+  }
   else { if (!arenaWindow.window) await arenaWindow.create(); arenaWindow.show(tabId); }
 }
 function hideArena() { if (arenaDocked) arena.setVisible(false); else arenaWindow.hide(); }

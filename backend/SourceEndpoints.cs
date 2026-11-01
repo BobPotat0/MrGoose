@@ -56,10 +56,11 @@ public static class SourceEndpoints
         { await db.SourceLinks.Where(l => l.Id == id).ExecuteDeleteAsync(); return Results.Ok(); });
 
         // ---- documents ----
+        // Compute hasText in SQL (LENGTH(Text) > 0) so the list never materialises every doc's full extracted text.
         app.MapGet("/api/sources/docs", async (MrGooseDb db) =>
-            Results.Ok((await db.SourceDocs.AsNoTracking()
-                .Select(d => new SourceDoc { Id = d.Id, Name = d.Name, Type = d.Type, Description = d.Description, Text = d.Text, Size = d.Size, CreatedAt = d.CreatedAt })
-                .OrderByDescending(d => d.Id).ToListAsync()).Select(DocInfo)));
+            Results.Ok(await db.SourceDocs.AsNoTracking().OrderByDescending(d => d.Id)
+                .Select(d => new { d.Id, d.Name, d.Type, d.Description, d.Size, hasText = d.Text.Length > 0, d.CreatedAt })
+                .ToListAsync()));
         app.MapPost("/api/sources/docs", async (IFormFile file, HttpRequest req, MrGooseDb db) =>
         {
             if (file.Length > MaxBytes) return Results.BadRequest(new { error = "Documents may be at most 20 MiB." });
