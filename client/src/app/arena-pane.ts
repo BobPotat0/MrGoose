@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, EventEmitter, OnDestroy, Output, ViewChild, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, EventEmitter, OnDestroy, Output, ViewChild, computed, inject, signal } from '@angular/core';
 import { ArenaService } from './arena.service';
 import { ApiService } from './api.service';
 import { ArenaTab } from './models';
@@ -35,6 +35,13 @@ import { ArenaTab } from './models';
         }
       </div>
 
+      @if (activeUrl()) {
+        <div class="row arena-url" style="gap: 6px; margin-bottom: 6px; align-items: center">
+          <span class="label-mono" style="opacity: 0.6">url</span>
+          <input class="input mono" style="flex: 1; min-width: 0; font-size: 11px" [value]="activeUrl()" readonly (focus)="$any($event.target).select()" title="Current arena address — log in once here and the session stays signed in" />
+        </div>
+      }
+
       @if (docked()) {
         <div #host class="arena-host"></div>
       }
@@ -58,6 +65,7 @@ export class ArenaPaneComponent implements AfterViewInit, OnDestroy {
 
   readonly available = this.arena.available;
   readonly tabs = signal<ArenaTab[]>([]);
+  readonly activeUrl = computed(() => this.tabs().find(t => t.active)?.url || '');
   readonly docked = signal(true);
   readonly pickedSel = signal('');
   arenaUrl = 'https://app.grayswan.ai/arena/challenge/ipi-black-2026';

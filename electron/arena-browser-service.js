@@ -109,8 +109,16 @@ class ArenaBrowserService {
     const tab = { id, view, navigation: 0, queue: Promise.resolve(), ...ownership };
     this.tabs.set(id, tab); window.contentView.addChildView(view); view.setBounds(this.bounds);
     this.activeTabId = id; this.visibility();
-    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    for (const event of ['will-navigate', 'will-redirect']) view.webContents.on(event, (e, target) => { try { this.validateUrl(target); } catch { e.preventDefault(); } });
+    // Allow auth pop-ups (Google / Discord OAuth) to open on the SAME persistent session so a login
+    // completes and sticks; deny non-web schemes. Page automation (fill/read) stays locked to the arena.
+    view.webContents.setWindowOpenHandler(({ url }) => {
+      try { const u = new URL(url); if (u.protocol === 'http:' || u.protocol === 'https:') return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, webPreferences: { partition: 'persist:arena', contextIsolation: true, sandbox: true, nodeIntegration: false } } }; } catch { /* fall through to deny */ }
+      return { action: 'deny' };
+    });
+    // Allow the operator to walk the login flow (arena → Google/Discord/… → back) — any web scheme.
+    // Programmatic loads (create/loadUrl) stay restricted to the arena origin, and page ops re-check the
+    // current URL (page=true), so automation never acts off the arena even if the view is elsewhere.
+    for (const event of ['will-navigate', 'will-redirect']) view.webContents.on(event, (e, target) => { if (!/^https?:\/\//i.test(target || '')) e.preventDefault(); });
     view.webContents.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => { if (mainFrame) { tab.navigation++; this.notify(); } });
     for (const event of ['did-finish-load', 'page-title-updated', 'render-process-gone']) view.webContents.on(event, () => this.notify());
     this.notify();
