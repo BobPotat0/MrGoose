@@ -18,7 +18,7 @@ type AStep = 'craft' | 'fill' | 'launch' | 'read' | 'record';
 type Overlay = '' | 'blocks' | 'breaks' | 'techs' | 'tools' | 'markers' | 'prompt' | 'enc';
 type ViewItem = { type: 'user' | 'assistant' | 'tool'; text: string; reasoning?: string; reasoningOpen?: boolean };
 type BatchEntry = { id: string; payload: string; label: string };
-type IField = { name: string; value: string; multiline: boolean; primary: boolean };
+type IField = { name: string; value: string; multiline: boolean; primary: boolean; selector?: string };
 type IPart = { id: string; surface: string; label: string; fields: IField[] };
 type CraftSnap = { id: string; at: number; parts: IPart[] };
 const ORDER = ['untested', 'break', 'wall', 'partial', 'na'];
@@ -469,6 +469,38 @@ export class WorkbenchPage {
     const req = surfaces.filter(s => s.required || s.minInstances >= 1);
     this.parts.set((req.length ? req : surfaces.slice(0, 1)).map(s => this.partFromSurface(s)));
   }
+  // Read the REAL fields (and their exact selectors) from the live arena form, so the builder always matches
+  // the current page even if Gray Swan changes it. Existing values are preserved by field name.
+  async syncFieldsFromWebsite() {
+    if (this.filling() || !this.arena.available) { if (!this.arena.available) this.toast.err('embedded arena is Electron-only'); return; }
+    const tabId = (await this.arena.list()).find(t => t.active)?.id;
+    if (!tabId) { this.toast.err('open an arena tab first'); return; }
+    this.filling.set(true);
+    try {
+      const insp = await this.arena.inspect(tabId);
+      const pageFields = insp.fields?.filter(f => f.editable) ?? [];
+      if (!insp.ok || !pageFields.length) { this.toast.err(insp.note || 'could not read the arena form — is the challenge page loaded?'); return; }
+      const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const prev = new Map<string, string>();
+      for (const p of this.parts()) for (const f of p.fields) if (f.value.trim()) prev.set(norm(f.name), f.value);
+      const seen = new Set<string>();
+      const fields: IField[] = [];
+      for (const pf of pageFields) {
+        const name = (pf.name || pf.id || pf.label || ('field' + (fields.length + 1))).trim();
+        const key = norm(name); if (!key || seen.has(key)) continue; seen.add(key);
+        const multiline = pf.tag === 'textarea' || /body|message|content|html|text|note|description/i.test(name);
+        fields.push({ name, value: prev.get(key) || '', multiline, primary: false, selector: pf.selector });
+      }
+      if (!fields.length) { this.toast.err('no editable fields found on the page'); return; }
+      const pIdx = fields.findIndex(f => /(^|_)body$|message|content/i.test(f.name));
+      fields[pIdx >= 0 ? pIdx : 0].primary = true;
+      const surf = this.scenarioSurfaces().find(s => s.required) ?? this.scenarioSurfaces()[0];
+      this.snapshotBuilder();
+      this.parts.set([{ id: crypto.randomUUID(), surface: surf?.key || 'website', label: surf?.label || 'live form', fields }]);
+      this.aStep.set('craft');
+      this.toast.ok(`loaded ${fields.length} field(s) from the live page`);
+    } finally { this.filling.set(false); }
+  }
   addSurface(su: SurfaceDto) { this.parts.update(p => [...p, this.partFromSurface(su)]); this.surfacePickerOpen.set(false); }
   removeSurface(id: string) { this.parts.update(p => p.filter(x => x.id !== id)); }
   addField(partId: string) { this.parts.update(ps => ps.map(p => p.id === partId ? { ...p, fields: [...p.fields, { name: 'field' + (p.fields.length + 1), value: '', multiline: true, primary: false }] } : p)); }
@@ -484,17 +516,16 @@ export class WorkbenchPage {
   async fillWebsite() {
     if (this.filling()) return;
     if (!this.arena.available) { this.toast.err('embedded arena is Electron-only'); return; }
-    const fields = this.parts().flatMap(p => p.fields.filter(f => f.value.trim()).map(f => ({ name: f.name, value: f.value, primary: f.primary })));
+    const fields = this.parts().flatMap(p => p.fields.filter(f => f.value.trim()).map(f => ({ name: f.name, value: f.value, primary: f.primary, selector: f.selector })));
     if (!fields.length) { this.toast.err('nothing crafted yet — craft first'); return; }
     const tabId = (await this.arena.list()).find(t => t.active)?.id;
     if (!tabId) { this.toast.err('open an arena tab first'); return; }
     this.filling.set(true);
     try {
       const insp = await this.arena.inspect(tabId);
-      const pageFields = insp.fields;
-      if (!insp.ok || !pageFields?.length) { this.toast.err(insp.note || 'could not read the arena form fields'); return; }
+      const editable = (insp.ok ? insp.fields : [])?.filter(pf => pf.editable) ?? [];
+      if (!editable.length && !fields.some(f => f.selector)) { this.toast.err(insp.note || 'could not read the arena form — try “⤓ from website”'); return; }
       const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const editable = pageFields.filter(pf => pf.editable);
       const match = (name: string) => {
         const n = norm(name);
         return editable.find(pf => norm(pf.name) === n || norm(pf.id) === n || norm(pf.label) === n)
@@ -504,12 +535,12 @@ export class WorkbenchPage {
       const used = new Set<string>();
       let filled = 0; const missed: string[] = [];
       for (const f of fields) {
-        const pf = match(f.name);
-        if (!pf || used.has(pf.selector)) { missed.push(f.name); continue; }
-        used.add(pf.selector);
+        const sel = f.selector || match(f.name)?.selector;   // live-loaded fields carry their exact selector
+        if (!sel || used.has(sel)) { missed.push(f.name); continue; }
+        used.add(sel);
         let val = f.value;
         if (enc && f.primary) { try { val = (await this.api.encodeChain(this.encKeys(), val, this.encMarked)).result; } catch { /* raw */ } }
-        const r = await this.arena.fill(pf.selector, val, tabId);
+        const r = await this.arena.fill(sel, val, tabId);
         if (r.ok) filled++; else missed.push(f.name);
       }
       if (filled) { this.aStep.set('launch'); this.toast.ok(`filled ${filled} field(s) into the arena${missed.length ? ' · unmatched: ' + missed.join(', ') : ''} — review, then launch/submit yourself`); }

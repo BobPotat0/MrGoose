@@ -743,7 +743,8 @@
             <div class="row spread">
               <span class="label-mono">Injection builder — surfaces & fields</span>
               <div class="row" style="gap: 6px">
-                <button class="btn" (click)="rebuildBuilder()" title="Reset to the scenario's surfaces">↺ reset</button
+                <button class="btn" (click)="syncFieldsFromWebsite()" [disabled]="!arena.available || filling()" title="Read the real fields from the live arena form (and their exact selectors), preserving values">⤓ from website</button
+                ><button class="btn" (click)="rebuildBuilder()" title="Reset to the scenario's surfaces">↺ reset</button
                 ><button class="btn" (click)="surfacePickerOpen.set(!surfacePickerOpen())">+ surface</button>
               </div>
             </div>
