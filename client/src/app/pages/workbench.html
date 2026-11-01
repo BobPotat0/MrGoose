@@ -764,8 +764,8 @@
                 @for (f of p.fields; track $index) {
                   <div style="margin-top: 6px">
                     <div class="row spread">
-                      <span class="mono dim" style="font-size: 11px">{{ f.name }}{{ f.primary ? ' · primary' : '' }}</span>
-                      <div class="row" style="gap: 6px"><button class="btn" (click)="copyField(f)" [disabled]="!f.value">copy</button><button class="btn danger" (click)="removeField(p.id, $index)">×</button></div>
+                      <span class="mono dim" style="font-size: 11px">{{ f.name }}{{ f.primary ? ' · primary' : '' }}{{ f.locked ? ' · 🔒 locked' : '' }}</span>
+                      <div class="row" style="gap: 6px"><button class="btn" [class.primary]="f.locked" (click)="toggleLock(p.id, $index)" [title]="f.locked ? 'Locked — the attacker won\'t fill this (you control it)' : 'Lock so the attacker won\'t fill this'">{{ f.locked ? '🔒' : '🔓' }}</button><button class="btn" (click)="copyField(f)" [disabled]="!f.value">copy</button><button class="btn danger" (click)="removeField(p.id, $index)">×</button></div>
                     </div>
                     <textarea class="textarea" [style.min-height]="f.multiline ? '72px' : '0'" [ngModel]="f.value" (ngModelChange)="setField(p.id, $index, $event)" [placeholder]="f.name"></textarea>
                   </div>
@@ -781,7 +781,13 @@
               ><button class="btn" (click)="recordSubmission('wall')" [disabled]="!builderHasContent()">Wall</button
               ><button class="btn" (click)="recordSubmission('partial')" [disabled]="!builderHasContent()">Partial</button>
             </div>
-            <p class="dim" style="font-size: 11px; margin-top: 4px">The craft auto-loads here; <strong>Fill website</strong> drops every field into its matching arena field (fill-only) — you launch/submit yourself. Per-field <strong>copy</strong> is the manual fallback.</p>
+            <p class="dim" style="font-size: 11px; margin-top: 4px">The craft auto-loads here; <strong>Fill website</strong> drops every field into its matching arena field (fill-only) — you launch/submit yourself. Per-field <strong>copy</strong> is the manual fallback. 🔒 locks a field so the attacker leaves it to you.</p>
+            @if (usedTechniques().length) {
+              <div class="row" style="flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center">
+                <span class="label-mono" style="font-size: 11px">⚔ techniques used:</span>
+                @for (t of usedTechniques(); track t) { <span class="chip">{{ t }}</span> }
+              </div>
+            }
             @if (craftSnaps().length) {
               <div class="row spread" style="margin-top: 8px"><span class="label-mono">Craft history</span><button class="btn" (click)="clearSnaps()">clear</button></div>
               @for (s of craftSnaps(); track s.id) {
