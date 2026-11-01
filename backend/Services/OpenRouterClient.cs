@@ -16,7 +16,8 @@ public class OpenRouterClient(IHttpClientFactory factory)
     /// conversation (system + user/assistant/tool). Returns the assistant message node (detached),
     /// which carries `content` and/or `tool_calls` — append it back before adding tool results.</summary>
     public async Task<JsonNode> CompleteAsync(
-        string apiKey, string model, IEnumerable<JsonNode> messages, JsonArray? tools, CancellationToken ct = default)
+        string apiKey, string model, IEnumerable<JsonNode> messages, JsonArray? tools, CancellationToken ct = default,
+        string? reasoning = null, double temperature = 0.7)
     {
         var http = factory.CreateClient();
         http.Timeout = TimeSpan.FromMinutes(5);
@@ -24,7 +25,8 @@ public class OpenRouterClient(IHttpClientFactory factory)
         var reqMessages = new JsonArray();
         foreach (var m in messages) reqMessages.Add(m.DeepClone());
 
-        var body = new JsonObject { ["model"] = model, ["messages"] = reqMessages, ["temperature"] = 0.7 };
+        var body = new JsonObject { ["model"] = model, ["messages"] = reqMessages, ["temperature"] = temperature };
+        ApplyReasoning(body, reasoning);
         if (tools is { Count: > 0 }) { body["tools"] = tools.DeepClone(); body["tool_choice"] = "auto"; }
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
@@ -41,12 +43,26 @@ public class OpenRouterClient(IHttpClientFactory factory)
         return msg?.DeepClone() ?? new JsonObject { ["role"] = "assistant", ["content"] = "[openrouter: empty response]" };
     }
 
+    /// <summary>Applies the operator's reasoning choice: "" / "default" → omit (model default);
+    /// "off" / "none" → reasoning disabled; "low"/"medium"/"high" (etc.) → that effort.</summary>
+    private static void ApplyReasoning(JsonObject body, string? reasoning)
+    {
+        var r = (reasoning ?? "").Trim().ToLowerInvariant();
+        switch (r)
+        {
+            case "" or "default": break;                                            // omit → provider/model default
+            case "off" or "none": body["reasoning"] = new JsonObject { ["enabled"] = false }; break;
+            default: body["reasoning"] = new JsonObject { ["effort"] = r }; break;
+        }
+    }
+
     /// <summary>Streaming completion with tool support + reasoning. Streams content tokens to
     /// <paramref name="onContent"/> and reasoning tokens to <paramref name="onReasoning"/>, accumulates any
     /// streamed tool_calls, and returns the finished assistant message node (content + tool_calls) for the loop.</summary>
     public async Task<JsonNode> StreamCompleteAsync(
         string apiKey, string model, IEnumerable<JsonNode> messages, JsonArray? tools,
-        Func<string, Task> onContent, Func<string, Task>? onReasoning, CancellationToken ct = default)
+        Func<string, Task> onContent, Func<string, Task>? onReasoning, CancellationToken ct = default,
+        string? reasoning = null, double temperature = 0.7)
     {
         var http = factory.CreateClient();
         http.Timeout = TimeSpan.FromMinutes(5);
@@ -54,7 +70,8 @@ public class OpenRouterClient(IHttpClientFactory factory)
         var reqMessages = new JsonArray();
         foreach (var m in messages) reqMessages.Add(m.DeepClone());
 
-        var body = new JsonObject { ["model"] = model, ["messages"] = reqMessages, ["temperature"] = 0.7, ["stream"] = true, ["reasoning"] = new JsonObject() };
+        var body = new JsonObject { ["model"] = model, ["messages"] = reqMessages, ["temperature"] = temperature, ["stream"] = true };
+        ApplyReasoning(body, reasoning);
         if (tools is { Count: > 0 }) { body["tools"] = tools.DeepClone(); body["tool_choice"] = "auto"; }
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");

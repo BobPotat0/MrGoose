@@ -121,6 +121,12 @@ function clickText(text) {
     check(errors.length === before, `/${route} produced no console errors`);
   }
 
+  // ── 1b) Settings tab: per-role model settings render (organizer + attacker), mirrored in their tabs ──
+  step = 'settings:roles';
+  await go(renderer, 'settings');
+  check(await browser.evaluate("document.querySelectorAll('mg-model-settings').length >= 2"), 'Settings shows per-role model settings (organizer + attacker)');
+  check(await browser.evaluate("!!document.querySelector('mg-model-settings select')"), 'model settings expose a reasoning control');
+
   // ── 2) workbench tabs switch ──
   step = 'workbench:tabs';
   await go(renderer, 'workbench');

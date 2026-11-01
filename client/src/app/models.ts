@@ -25,7 +25,8 @@ export interface TechniqueDto { id: number; slug: string; title: string; summary
 export interface TechniqueTagDto { id: number; key: string; color: string; description: string; }
 export interface EncodingTransform { key: string; name: string; category: string; }
 export interface SubmissionDto { id: number; externalId: string; scenarioCode: string; modelName: string; payloadJson: string; status: string; isBreak: boolean; submittedAt: string; }
-export interface SettingsDto { model: string; hasKey: boolean; arenaUrl: string; }
+export interface RoleModelSettings { model: string; reasoning: string; temperature: number; }
+export interface SettingsDto { model: string; hasKey: boolean; arenaUrl: string; organizer: RoleModelSettings; attacker: RoleModelSettings; }
 export interface KeyInfo { id: number; name: string; active: boolean; last4: string; }
 export interface ModelInfo { id: string; name: string; prompt: string; completion: string; }
 export interface UsageInfo { hasKey: boolean; spentToday: number | null; balance: number | null; }

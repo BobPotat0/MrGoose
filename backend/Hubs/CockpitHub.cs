@@ -27,14 +27,14 @@ public sealed class CockpitHub(MrGooseDb db, OpenRouterClient openRouter, Attack
     public async Task OrganizerChat(List<ChatMsgDto> messages, string? sessionId = null)
     {
         var key = await KeyStore.GetActiveKeyAsync(db);
-        var model = (await db.Settings.FindAsync("openrouter.model"))?.Value ?? "";
+        var cfg = await RoleSettings.ResolveAsync(db, "organizer");
+        var model = cfg.Model;
         if (string.IsNullOrWhiteSpace(key))
         {
             await Clients.Caller.SendAsync("organizerToken", "⚠ No OpenRouter key set. Add it in Settings.");
             await Clients.Caller.SendAsync("organizerDone", new { ok = false });
             return;
         }
-        if (string.IsNullOrWhiteSpace(model)) model = "openai/gpt-4o-mini";
 
         var tools = OrganizerService.BuildTools();
         var msgs = new List<JsonNode> { Msg("system", await OrganizerService.BuildSystemAsync(db)) };
@@ -47,7 +47,7 @@ public sealed class CockpitHub(MrGooseDb db, OpenRouterClient openRouter, Attack
                 var assistant = await openRouter.StreamCompleteAsync(key, model, msgs, tools,
                     tok => Clients.Caller.SendAsync("organizerToken", tok),
                     tok => Clients.Caller.SendAsync("organizerReasoning", tok),
-                    Context.ConnectionAborted);
+                    Context.ConnectionAborted, cfg.Reasoning, cfg.Temperature);
                 msgs.Add(assistant);
                 if (assistant["tool_calls"] is not JsonArray calls || calls.Count == 0) break;
 
@@ -162,13 +162,13 @@ public sealed class CockpitHub(MrGooseDb db, OpenRouterClient openRouter, Attack
         try
         {
             var key = await KeyStore.GetActiveKeyAsync(db);
-            var model = (await db.Settings.FindAsync("openrouter.model"))?.Value ?? "";
+            var cfg = await RoleSettings.ResolveAsync(db, "attacker");
+            var model = cfg.Model;
             if (string.IsNullOrWhiteSpace(key))
             {
                 await Clients.Caller.SendAsync("attackerToken", new { requestId = req.RequestId, text = "⚠ No OpenRouter key set. Add it in Settings to use the attacker." });
                 return;
             }
-            if (string.IsNullOrWhiteSpace(model)) model = "openai/gpt-4o-mini";
             var system = string.IsNullOrWhiteSpace(req.SystemPrompt)
                 ? await craft.BuildSystemPromptAsync(new AttackerService.PromptSelection(req.ScenarioCode, req.ModelName, [], [], [], true))
                 : req.SystemPrompt;
@@ -181,7 +181,7 @@ public sealed class CockpitHub(MrGooseDb db, OpenRouterClient openRouter, Attack
                 var assistant = await openRouter.StreamCompleteAsync(key, model, messages, tools,
                     tok => Clients.Caller.SendAsync("attackerToken", new { requestId = req.RequestId, text = tok }, ct),
                     tok => Clients.Caller.SendAsync("attackerReasoning", new { requestId = req.RequestId, text = tok }, ct),
-                    ct);
+                    ct, cfg.Reasoning, cfg.Temperature);
                 ct.ThrowIfCancellationRequested();
                 messages.Add(assistant);
 

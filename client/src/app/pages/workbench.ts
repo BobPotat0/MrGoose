@@ -9,8 +9,9 @@ import { ArenaPaneComponent } from '../arena-pane';
 import { toolLabel } from '../tool-labels';
 import {
   ChallengeDetail, ChallengeSummary, ModelDto, ScenarioDto, SurfaceDto, DossierState, DossierFact,
-  TechniqueDto, BuildingBlockDto, MarkerDto, PromptSelection, EncodingTransform, PromptDto, ReconDto, ModelInfo, BreakItem,
+  TechniqueDto, BuildingBlockDto, MarkerDto, PromptSelection, EncodingTransform, PromptDto, ReconDto, BreakItem,
 } from '../models';
+import { ModelSettingsComponent } from '../model-settings.component';
 
 type Tab = 'overview' | 'analyze' | 'attack';
 type AStep = 'craft' | 'fill' | 'launch' | 'read' | 'record';
@@ -24,7 +25,7 @@ const ORDER = ['untested', 'break', 'wall', 'partial', 'na'];
 
 @Component({
   selector: 'mg-workbench',
-  imports: [FormsModule, ArenaPaneComponent],
+  imports: [FormsModule, ArenaPaneComponent, ModelSettingsComponent],
   templateUrl: './workbench.html',
   styleUrl: './workbench.css',
 })
@@ -80,9 +81,6 @@ export class WorkbenchPage {
   private aborted = false;
   private requestId: string | null = null;
   readonly stopping = signal(false);
-  modelQuery = '';
-  readonly modelResults = signal<ModelInfo[]>([]);
-  readonly currentModel = signal('');
   readonly crafted = signal('');
   readonly victim = signal('');
   // Batch (multi-tab): queue several payloads (copies or attacker-generated variants) and fill each into
@@ -230,7 +228,7 @@ export class WorkbenchPage {
   async delTool(id: number) { await this.api.delTool(id); await this.onSelect(); }
 
   // overlays
-  overlayTitle() { return ({ breaks: '🎯 Break from prompt library as reference', blocks: '🧩 Building blocks — click to insert', techs: '⚔ Techniques', tools: '🛠 Tool calls / forge', markers: '✎ Markers', prompt: '🤖 Model settings & system prompt', enc: '🔡 Payload encoder' } as Record<string, string>)[this.overlay()] ?? ''; }
+  overlayTitle() { return ({ breaks: '🎯 Break from prompt library as reference', blocks: '🧩 Building blocks — click to insert', techs: '⚔ Techniques', tools: '🛠 Tool calls / forge', markers: '✎ Markers', prompt: '⚙ Attacker settings', enc: '🔡 Payload encoder' } as Record<string, string>)[this.overlay()] ?? ''; }
   openOverlay(o: Overlay) { this.overlay.set(o); this.arena.setVisible(false); }
   closeOverlay() { this.overlay.set(''); this.arena.setVisible(true); }
   filteredBreakRefs(): PromptDto[] {
@@ -267,13 +265,9 @@ export class WorkbenchPage {
   private selection(): PromptSelection { return { scenarioCode: this.scenarioCode, modelName: this.modelName, techniqueIds: [...this.selTechs()], blockIds: [...this.selBlocks()], breakIds: [...this.selBreaks()], includeRecon: this.includeRecon }; }
   async openPrompt() {
     this.promptDraft = (await this.api.systemPrompt(this.selection())).prompt;
-    this.modelResults.set([]); this.modelQuery = '';
-    try { this.currentModel.set((await this.api.settings()).model); } catch { /* backend down */ }
     this.openOverlay('prompt');
   }
   async resyncPrompt() { this.promptDraft = (await this.api.systemPrompt(this.selection())).prompt; this.toast.ok('re-synced'); }
-  async searchModels() { if (!this.modelQuery.trim()) return; try { this.modelResults.set(await this.api.models(this.modelQuery.trim())); } catch { this.toast.err('model search failed'); } }
-  async pickModel(id: string) { await this.api.setSetting('openrouter.model', id); this.currentModel.set(id); this.modelResults.set([]); this.toast.ok('model → ' + id); }
 
   async send() {
     if (this.streaming() || this.batchBusy() || !this.input.trim()) return;

@@ -8,11 +8,12 @@ import { OrganizerChatStore } from '../organizer-chat.store';
 import { OrganizerFilesComponent } from '../organizer-files.component';
 import { InspectorComponent } from '../inspector.component';
 import { InspectorStore } from '../inspector.store';
+import { ModelSettingsComponent } from '../model-settings.component';
 import { KnowledgeNote, OrganizerDoc, OrganizerFileInfo } from '../models';
 
 @Component({
   selector: 'mg-assistant',
-  imports: [FormsModule, OrganizerFilesComponent, InspectorComponent],
+  imports: [FormsModule, OrganizerFilesComponent, InspectorComponent, ModelSettingsComponent],
   template: `
     <section class="page agent-page">
       <header class="page-head agent-head">
@@ -32,15 +33,25 @@ import { KnowledgeNote, OrganizerDoc, OrganizerFileInfo } from '../models';
             <button class="btn" [class.primary]="orgMode() === 'direct'" (click)="setOrgMode('direct')">Direct</button>
             <button class="btn" [class.primary]="orgMode() === 'mcp'" (click)="setOrgMode('mcp')">MCP</button>
           </div>
-          <button class="btn" type="button" (click)="showInstructions.set(!showInstructions())" [attr.aria-expanded]="showInstructions()" aria-controls="agent-instructions">Instructions</button>
+          <button class="btn" type="button" (click)="showInstructions.set(!showInstructions())" [attr.aria-expanded]="showInstructions()" aria-controls="agent-instructions">Organizer settings</button>
           <button class="btn" type="button" (click)="showFiles.set(!showFiles())" [attr.aria-expanded]="showFiles()" aria-controls="agent-session-files" [disabled]="chat.uploading()">Files</button>
           <button class="btn ghost" type="button" (click)="deleteChat()" [disabled]="chat.streaming() || chat.uploading() || !chat.sessions().length">Delete chat</button>
         </div>
       </header>
 
       @if (showInstructions()) {
-      <section id="agent-instructions" class="instructions-panel" aria-label="Agent instructions">
-        <div class="row spread instructions-head"><span class="label-mono">Instructions</span><button class="btn ghost" type="button" (click)="showInstructions.set(false)">Close</button></div>
+      <section id="agent-instructions" class="instructions-panel" aria-label="Organizer settings">
+        <div class="row spread instructions-head"><span class="label-mono">Organizer settings</span><button class="btn ghost" type="button" (click)="showInstructions.set(false)">Close</button></div>
+
+      <!-- model settings (model · reasoning · temperature) — mirrored in the Settings tab -->
+      <div class="card alt">
+        <div class="row spread" style="cursor:pointer" (click)="showModelCfg.set(!showModelCfg())">
+          <span class="label-mono">{{ showModelCfg() ? '▾' : '▸' }} model settings</span>
+          <span class="muted" style="font-size:11px">model · reasoning · temperature — also in Settings</span>
+        </div>
+        @if (showModelCfg()) { <div style="margin-top:10px"><mg-model-settings role="organizer" (changed)="refreshModelLabel()" /></div> }
+      </div>
+
       <!-- system prompt (view + edit) -->
       <div class="card alt">
         <div class="row spread" style="cursor:pointer" (click)="showSys.set(!showSys())">
@@ -252,7 +263,8 @@ export class OrganizerPage implements OnDestroy {
   private stick = true;
   private threadObserver?: MutationObserver;
 
-  // system prompt + knowledge base
+  // model settings + system prompt + knowledge base
+  readonly showModelCfg = signal(true);
   readonly showSys = signal(false);
   readonly showKb = signal(false);
   readonly sysCustom = signal(false);
@@ -326,8 +338,9 @@ export class OrganizerPage implements OnDestroy {
   }
 
   private async loadAgentConfig() {
-    try { const s = await this.api.organizerSystem(); this.sysPrompt = s.prompt; this.sysCustom.set(s.isCustom); this.docs.set(await this.api.organizerDocs()); this.knowledge.set(await this.api.knowledge()); const settings = await this.api.settings(); this.modelLabel.set(settings.model || 'Choose a model in Settings'); } catch { /* backend down */ }
+    try { const s = await this.api.organizerSystem(); this.sysPrompt = s.prompt; this.sysCustom.set(s.isCustom); this.docs.set(await this.api.organizerDocs()); this.knowledge.set(await this.api.knowledge()); await this.refreshModelLabel(); } catch { /* backend down */ }
   }
+  async refreshModelLabel() { try { this.modelLabel.set((await this.api.settings()).organizer.model || 'Choose a model in Settings'); } catch { /* backend down */ } }
   async saveSys() { await this.api.setOrganizerSystem(this.sysPrompt); this.sysCustom.set(true); this.toast.ok('system prompt saved'); }
   async resetSys() { const r = await this.api.resetOrganizerSystem(); this.sysPrompt = r.prompt; this.sysCustom.set(false); this.toast.ok('reset to default'); }
   async addKb() { await this.api.addKnowledge({ title: this.kbTitle.trim(), content: this.kbContent.trim() }); this.kbTitle = ''; this.kbContent = ''; this.knowledge.set(await this.api.knowledge()); this.toast.ok('note added'); }

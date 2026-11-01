@@ -629,7 +629,7 @@
             <button class="btn" (click)="openOverlay('markers')">
               Markers <span>{{ markers().length }}</span>
             </button>
-            <button class="btn" (click)="openPrompt()">Model settings ↗</button>
+            <button class="btn" (click)="openPrompt()">Attacker settings ↗</button>
           </div>
           <label class="recon-option"
             ><input type="checkbox" [(ngModel)]="includeRecon" /> Include scenario recon</label
@@ -1055,24 +1055,15 @@
 
           @if (overlay() === 'prompt') {
             <div class="card alt" style="margin-bottom: 10px">
-              <div class="row spread">
-                <span class="label-mono">Model</span>
-                <span class="mono dim" style="font-size: 11px">current: {{ currentModel() || '—' }}</span>
-              </div>
-              <div class="row" style="margin-top: 6px; gap: 6px">
-                <input class="input grow" [(ngModel)]="modelQuery" (keydown.enter)="searchModels()" placeholder="search OpenRouter models…" />
-                <button class="btn" (click)="searchModels()">search</button>
-              </div>
-              @for (m of modelResults(); track m.id) {
-                <button class="btn" style="width: 100%; justify-content: space-between; margin-top: 4px" (click)="pickModel(m.id)">
-                  <span>{{ m.name }}</span><span class="mono dim" style="font-size: 10px">{{ m.id }}</span>
-                </button>
-              }
+              <span class="label-mono">Model settings</span>
+              <p class="muted" style="font-size: 11px; margin: 4px 0 10px">model · reasoning · temperature for the attacker — mirrored in the Settings tab.</p>
+              <mg-model-settings role="attacker" />
             </div>
-            <div class="row" style="margin-bottom: 8px">
+            <span class="label-mono">System prompt</span>
+            <div class="row" style="margin: 6px 0 8px">
               <button class="btn" (click)="resyncPrompt()">↻ re-sync from selection</button
               ><span class="muted" style="font-size: 11px; margin-left: 8px"
-                >edited text is used on send</span
+                >full assembled prompt (persona + scenario + dossier) · edited text is used on send</span
               >
             </div>
             <textarea

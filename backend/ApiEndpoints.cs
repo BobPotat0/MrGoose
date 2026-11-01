@@ -459,11 +459,19 @@ public static class ApiEndpoints
         app.MapGet("/api/settings", async (MrGooseDb db) =>
         {
             var all = await db.Settings.ToDictionaryAsync(s => s.Key, s => s.Value);
+            object Role(string role) => new
+            {
+                model = all.GetValueOrDefault($"{role}.model", ""),
+                reasoning = all.TryGetValue($"{role}.reasoning", out var rr) && !string.IsNullOrWhiteSpace(rr) ? rr : Services.RoleSettings.Default,
+                temperature = Services.RoleSettings.ParseTemperature(all.GetValueOrDefault($"{role}.temperature", "")),
+            };
             return Results.Ok(new
             {
                 model = all.GetValueOrDefault("openrouter.model", ""),
                 hasKey = !string.IsNullOrWhiteSpace(await Services.KeyStore.GetActiveKeyAsync(db)),
                 arenaUrl = all.GetValueOrDefault("arena.url", "https://app.grayswan.ai/arena/challenge/ipi-black-2026"),
+                organizer = Role("organizer"),
+                attacker = Role("attacker"),
             });
         });
 

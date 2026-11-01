@@ -2,11 +2,12 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../api.service';
 import { ToastService } from '../toast.service';
-import { KeyInfo, ModelInfo, DesktopUpdate } from '../models';
+import { ModelSettingsComponent } from '../model-settings.component';
+import { KeyInfo, DesktopUpdate } from '../models';
 
 @Component({
   selector: 'mg-settings',
-  imports: [FormsModule],
+  imports: [FormsModule, ModelSettingsComponent],
   template: `
     <section class="page" style="max-width:760px">
       <header class="page-head">
@@ -50,23 +51,16 @@ import { KeyInfo, ModelInfo, DesktopUpdate } from '../models';
         <div class="row" style="margin-top:10px"><input class="input" style="max-width:150px" [(ngModel)]="newKeyName" placeholder="name (e.g. main)" /><input class="input grow" type="password" [(ngModel)]="newKeyValue" placeholder="sk-or-…" /><button class="btn primary" (click)="addKey()" [disabled]="!newKeyValue.trim()">+ add key</button></div>
       </div>
 
-      <!-- model picker with search -->
+      <!-- per-role model settings — the SAME keys the Organizer tab and Find Break "Attacker settings" use -->
       <div class="card">
-        <span class="label-mono">Model</span>
-        <p class="muted" style="font-size:12px;margin:6px 0">Current: <span class="mono">{{ model || '(none)' }}</span></p>
-        <div class="row"><input class="input grow" [(ngModel)]="modelQuery" (ngModelChange)="searchModels()" placeholder="search models… e.g. claude, gpt, llama, free" /><button class="btn" (click)="searchModels()">search</button></div>
-        @if (searching()) { <p class="muted" style="font-size:11px;margin-top:6px">searching…</p> }
-        @if (modelResults().length) {
-          <div style="max-height:320px;overflow-y:auto;margin-top:8px">
-            @for (m of modelResults(); track m.id) {
-              <div class="card" style="margin-top:6px;padding:8px 10px;cursor:pointer" [style.border-color]="m.id===model ? 'var(--lime)' : ''" (click)="selectModel(m)">
-                <div class="row spread"><span class="mono" style="font-size:12.5px" [style.color]="m.id===model ? 'var(--lime)' : 'var(--text)'">{{ m.id }}</span>@if (m.id===model) { <span class="chip lime">selected</span> }</div>
-                <div class="muted" style="font-size:11px;margin-top:2px">{{ m.name }}@if (m.prompt) { <span class="mono"> · in {{ m.prompt }}/tok · out {{ m.completion }}/tok</span> }</div>
-              </div>
-            }
-          </div>
-        } @else if (modelQuery && !searching()) { <p class="muted" style="font-size:12px;margin-top:6px">no matches</p> }
-        <div class="row" style="margin-top:10px"><input class="input grow" [(ngModel)]="model" placeholder="or type a model id" /><button class="btn primary" (click)="saveModel()">save model</button></div>
+        <span class="label-mono">Organizer settings</span>
+        <p class="muted" style="font-size:12px;margin:6px 0">Model · reasoning · temperature for the Mr Goose Organizer. Mirrors the Organizer tab — change it here or there, it applies to both.</p>
+        <mg-model-settings role="organizer" />
+      </div>
+      <div class="card">
+        <span class="label-mono">Attacker settings</span>
+        <p class="muted" style="font-size:12px;margin:6px 0">Model · reasoning · temperature for the attacker in Break Workbench / Find Break. Mirrors the “Attacker settings” panel there.</p>
+        <mg-model-settings role="attacker" />
       </div>
 
       <div class="card">
@@ -99,16 +93,13 @@ export class SettingsPage {
   private api = inject(ApiService);
   private toast = inject(ToastService);
   readonly keys = signal<KeyInfo[]>([]);
-  readonly modelResults = signal<ModelInfo[]>([]);
-  readonly searching = signal(false);
   readonly mcpAvailable = !!window.mrgoose?.mcp;
   readonly mcpConfig = signal('');
   readonly mcpSetupPrompt = signal('');
   readonly mcpProfiles = signal('');
   mcpProfile = '';
-  model = ''; arenaUrl = '';
-  newKeyName = ''; newKeyValue = ''; modelQuery = '';
-  private searchTimer: any;
+  arenaUrl = '';
+  newKeyName = ''; newKeyValue = '';
   readonly appVersion = signal('');
   readonly packaged = signal(false);
   readonly update = signal<DesktopUpdate>({ state: 'idle', message: '' });
@@ -133,7 +124,7 @@ export class SettingsPage {
   async installUpdate() { await window.mrgoose?.app?.installUpdate(); }
   async load() {
     const s = await this.api.settings();
-    this.model = s.model; this.arenaUrl = s.arenaUrl;
+    this.arenaUrl = s.arenaUrl;
     this.keys.set(await this.api.keys());
     await this.loadMcp();
   }
@@ -152,15 +143,5 @@ export class SettingsPage {
   async activate(k: KeyInfo) { await this.api.activateKey(k.id); this.keys.set(await this.api.keys()); this.toast.ok(`active key → ${k.name}`); }
   async delKey(k: KeyInfo) { await this.api.deleteKey(k.id); this.keys.set(await this.api.keys()); this.toast.ok('key deleted'); }
 
-  searchModels() {
-    clearTimeout(this.searchTimer);
-    this.searchTimer = setTimeout(async () => {
-      this.searching.set(true);
-      try { this.modelResults.set(await this.api.models(this.modelQuery.trim())); } catch { this.modelResults.set([]); }
-      this.searching.set(false);
-    }, 250);
-  }
-  selectModel(m: ModelInfo) { this.model = m.id; }
-  async saveModel() { await this.api.setSetting('openrouter.model', this.model.trim()); this.toast.ok('model saved'); }
   async saveArena() { await this.api.setSetting('arena.url', this.arenaUrl.trim()); this.toast.ok('arena URL saved'); }
 }
