@@ -133,6 +133,7 @@ function clickText(text) {
   step = 'workbench:batch';
   await until(() => browser.evaluate("!!document.querySelector('.batch-actions')"), 8000, 'batch card');
   check(true, 'Batch multi-tab card renders on Find Break');
+  check(await browser.evaluate("!!document.querySelector('.builder-card')"), 'Multi-surface injection builder renders on Find Break');
   check(await clickText('+ add current'), '"+ add current" is clickable (guards gracefully with no craft)');
   await clickText('Clear');
   check(true, 'batch add/clear run without errors');

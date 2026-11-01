@@ -719,6 +719,56 @@
             </button>
           </div>
           }
+          <div class="card builder-card">
+            <div class="row spread">
+              <span class="label-mono">Injection builder — surfaces & fields</span>
+              <div class="row" style="gap: 6px">
+                <button class="btn" (click)="rebuildBuilder()" title="Reset to the scenario's surfaces">↺ reset</button
+                ><button class="btn" (click)="surfacePickerOpen.set(!surfacePickerOpen())">+ surface</button>
+              </div>
+            </div>
+            @if (surfacePickerOpen()) {
+              <div class="row" style="flex-wrap: wrap; gap: 6px; margin-top: 6px">
+                @for (su of scenarioSurfaces(); track su.key) {
+                  <button class="btn" (click)="addSurface(su)">{{ su.required ? '★ ' : '' }}{{ su.label || su.key }}</button>
+                } @empty { <span class="dim" style="font-size: 11px">This scenario declares no surfaces.</span> }
+              </div>
+            }
+            @for (p of parts(); track p.id) {
+              <div class="card" style="margin-top: 8px; padding: 9px 11px">
+                <div class="row spread">
+                  <strong style="font-size: 12.5px">{{ p.label }} <span class="mono dim" style="font-size: 11px">{{ p.surface }}</span></strong>
+                  <div class="row" style="gap: 6px"><button class="btn" (click)="addField(p.id)">+ field</button><button class="btn danger" (click)="removeSurface(p.id)">×</button></div>
+                </div>
+                @for (f of p.fields; track $index) {
+                  <div style="margin-top: 6px">
+                    <div class="row spread">
+                      <span class="mono dim" style="font-size: 11px">{{ f.name }}{{ f.primary ? ' · primary' : '' }}</span>
+                      <div class="row" style="gap: 6px"><button class="btn" (click)="copyField(f)" [disabled]="!f.value">copy</button><button class="btn danger" (click)="removeField(p.id, $index)">×</button></div>
+                    </div>
+                    <textarea class="textarea" [style.min-height]="f.multiline ? '72px' : '0'" [ngModel]="f.value" (ngModelChange)="setField(p.id, $index, $event)" [placeholder]="f.name"></textarea>
+                  </div>
+                }
+              </div>
+            } @empty { <p class="dim" style="font-size: 11px; margin-top: 6px">No surfaces — click "+ surface" (this scenario may declare none).</p> }
+            <div class="row" style="gap: 6px; margin-top: 8px; flex-wrap: wrap; align-items: center">
+              <button class="btn primary" (click)="craftAttack()" [disabled]="streaming() || !!batchBusy()">✦ Craft Attack</button
+              ><button class="btn" (click)="applyReply()" [disabled]="streaming()">⇥ Apply reply</button
+              ><button class="btn" (click)="fillPrimary()" [disabled]="!arena.available || !builderPrimary()">Fill primary →</button>
+              <span class="grow"></span>
+              <span class="dim" style="font-size: 11px">Record:</span>
+              <button class="btn verdict-break" (click)="recordSubmission('break')" [disabled]="!builderHasContent()">Break</button
+              ><button class="btn" (click)="recordSubmission('wall')" [disabled]="!builderHasContent()">Wall</button
+              ><button class="btn" (click)="recordSubmission('partial')" [disabled]="!builderHasContent()">Partial</button>
+            </div>
+            <p class="dim" style="font-size: 11px; margin-top: 4px">Per-field <strong>copy</strong> into the arena form (fill-only) — you launch/submit each yourself.</p>
+            @if (craftSnaps().length) {
+              <div class="row spread" style="margin-top: 8px"><span class="label-mono">Craft history</span><button class="btn" (click)="clearSnaps()">clear</button></div>
+              @for (s of craftSnaps(); track s.id) {
+                <div class="row spread" style="margin-top: 4px"><span class="mono dim" style="font-size: 11px">{{ snapTime(s.at) }} · {{ s.parts.length }} surface(s)</span><button class="btn" (click)="restoreSnap(s.id)">restore</button></div>
+              }
+            }
+          </div>
           <div class="payload-actions">
             <span class="label-mono">Payload</span
             ><button
