@@ -86,8 +86,8 @@ public class OrganizerService(MrGooseDb db, AttackerService craft, OpenRouterCli
         // techniques
         Fn("list_techniques", "List techniques (with tags).", O());
         Fn("show_techniques", "Open a table of the current technique library in the operator's chat. Use when asked to show or display techniques.", O());
-        Fn("create_technique", "Create a technique. tags csv of: direct|indirect|encoding.", new JsonObject { ["title"] = P("string", ""), ["summary"] = P("string", ""), ["whenItWorks"] = P("string", ""), ["example"] = P("string", ""), ["tags"] = P("string", "") }, "title");
-        Fn("update_technique", "Update a user technique by id (built-ins are read-only).", new JsonObject { ["id"] = P("number", ""), ["title"] = P("string", ""), ["summary"] = P("string", ""), ["whenItWorks"] = P("string", ""), ["example"] = P("string", ""), ["tags"] = P("string", "") }, "id");
+        Fn("create_technique", "Create a technique. tags csv of: direct|indirect|encoding.", new JsonObject { ["title"] = P("string", ""), ["summary"] = P("string", ""), ["whenItWorks"] = P("string", ""), ["example"] = P("string", ""), ["tags"] = P("string", ""), ["requiresEncoding"] = P("boolean", "true if the technique relies on the encoding pipeline") }, "title");
+        Fn("update_technique", "Update a user technique by id (built-ins are read-only).", new JsonObject { ["id"] = P("number", ""), ["title"] = P("string", ""), ["summary"] = P("string", ""), ["whenItWorks"] = P("string", ""), ["example"] = P("string", ""), ["tags"] = P("string", ""), ["requiresEncoding"] = P("boolean", "true if the technique relies on the encoding pipeline") }, "id");
         Fn("delete_technique", "Delete a user technique by id (built-ins cannot be deleted).", new JsonObject { ["id"] = P("number", "") }, "id");
         Fn("reset_techniques", "Restore the built-in technique catalog (keeps user techniques).", O());
         Fn("dedupe_techniques", "Remove duplicate user techniques (keep the first per title; built-ins kept).", O());
@@ -230,11 +230,11 @@ public class OrganizerService(MrGooseDb db, AttackerService craft, OpenRouterCli
 
             case "show_techniques": return Json((await db.Techniques.AsNoTracking().OrderBy(t => t.Id).ToListAsync()).Select(t => new { id = t.Id, title = t.Title, summary = t.Summary, whenItWorks = t.WhenItWorks, example = t.Example, tags = t.Tags, builtin = t.Builtin }));
             case "list_techniques": return Json((await db.Techniques.ToListAsync()).Select(t => new { t.Id, t.Title, t.Tags, t.Builtin }));
-            case "create_technique": { var t = new Technique { Title = S("title"), Summary = S("summary"), WhenItWorks = S("whenItWorks"), Example = S("example"), Tags = S("tags") }; db.Techniques.Add(t); await db.SaveChangesAsync(); return $"technique {t.Id}"; }
+            case "create_technique": { var t = new Technique { Title = S("title"), Summary = S("summary"), WhenItWorks = S("whenItWorks"), Example = S("example"), Tags = S("tags"), RequiresEncoding = B("requiresEncoding") ?? false }; db.Techniques.Add(t); await db.SaveChangesAsync(); return $"technique {t.Id}"; }
             case "update_technique":
             {
                 var t = await db.Techniques.FindAsync(I("id")); if (t is null) return "not found"; if (t.Builtin) return "built-in techniques are read-only";
-                if (S("title") != "") t.Title = S("title"); if (S("summary") != "") t.Summary = S("summary"); if (S("whenItWorks") != "") t.WhenItWorks = S("whenItWorks"); if (S("example") != "") t.Example = S("example"); if (S("tags") != "") t.Tags = S("tags");
+                if (S("title") != "") t.Title = S("title"); if (S("summary") != "") t.Summary = S("summary"); if (S("whenItWorks") != "") t.WhenItWorks = S("whenItWorks"); if (S("example") != "") t.Example = S("example"); if (S("tags") != "") t.Tags = S("tags"); if (B("requiresEncoding") is bool re) t.RequiresEncoding = re;
                 await db.SaveChangesAsync(); return "updated";
             }
             case "delete_technique": { var t = await db.Techniques.FindAsync(I("id")); if (t is null) return "not found"; if (t.Builtin) return "built-in techniques cannot be deleted"; db.Techniques.Remove(t); await db.SaveChangesAsync(); return "deleted"; }

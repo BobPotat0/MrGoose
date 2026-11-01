@@ -163,6 +163,11 @@ function clickText(text) {
   await until(() => browser.evaluate("fetch(window.mrgoose.backendUrl+'/api/techniques',{headers:{Authorization:'Bearer '+window.mrgoose.backendToken}}).then(r=>r.json()).then(rows=>rows.some(t=>t.title==='UI smoke renamed' && t.whenItWorks==='keep-this'))"), 10000, 'edit persisted');
   check(true, 'Inspector saves edits (and keeps "When it works")');
 
+  // ── 6) MCP path: organizer_run create_technique honours requiresEncoding ──
+  step = 'mcp:requiresEncoding';
+  const encOk = await browser.evaluate("(async()=>{const h={Authorization:'Bearer '+window.mrgoose.backendToken,'Content-Type':'application/json'};await fetch(window.mrgoose.backendUrl+'/api/control/organizer_run',{method:'POST',headers:h,body:JSON.stringify({tool:'create_technique',args:{title:'MCP enc fixture',tags:'encoding',requiresEncoding:true}})});const rows=await fetch(window.mrgoose.backendUrl+'/api/techniques',{headers:h}).then(r=>r.json());return rows.some(t=>t.title==='MCP enc fixture'&&t.requiresEncoding===true);})()");
+  check(encOk, 'organizer_run create_technique persists requiresEncoding (MCP wiring)');
+
   // ── final: no console errors anywhere ──
   step = 'final';
   await sleep(400);

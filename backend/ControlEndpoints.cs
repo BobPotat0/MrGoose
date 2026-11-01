@@ -87,7 +87,7 @@ public static class ControlEndpoints
                     if (scenario == null || model == null) return Results.NotFound(new { code = "CONTEXT_NOT_FOUND" });
                     var brief = await attacker.BuildSystemPromptAsync(new AttackerService.PromptSelection(code, modelName, [], [], [], true));
                     var state = model.States.FirstOrDefault(s => s.ScenarioCode == code);
-                    var techniques = await db.Techniques.AsNoTracking().Select(t => new { t.Id, t.Title, t.Tags }).ToListAsync();
+                    var techniques = await db.Techniques.AsNoTracking().Select(t => new { t.Id, t.Title, t.Tags, t.RequiresEncoding }).ToListAsync();
                     var refs = await db.Prompts.AsNoTracking().Where(p => p.ScenarioCode == code).Select(p => new { p.Id, p.Title, p.Verdict, p.Tags }).ToListAsync();
                     return Results.Ok(new
                     {
