@@ -147,6 +147,7 @@ public class DossierFact
     public string Name { get; set; } = "";
     public string Detail { get; set; } = "";
     public string Status { get; set; } = "confirmed"; // confirmed | suspected | refuted
+    public string EvidenceRef { get; set; } = "";     // which fired call / run surfaced this fact
 }
 
 public class DossierInjection
@@ -157,7 +158,8 @@ public class DossierInjection
     public string Name { get; set; } = "";
     public string Surface { get; set; } = "";
     public string Techniques { get; set; } = "";     // csv
-    public string Payload { get; set; } = "";
+    public string Payload { get; set; } = "";         // legacy/primary-field mirror
+    public string PartsJson { get; set; } = "";       // JSON [{surface,label,fields:[{name,value}]}] for multi-surface submissions
     public string Verdict { get; set; } = "untested"; // break | wall | partial | untested
     public string FlaggedBy { get; set; } = "";
     public DateTimeOffset Date { get; set; } = DateTimeOffset.UtcNow;
