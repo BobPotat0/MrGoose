@@ -305,6 +305,8 @@ export class WorkbenchPage {
       this.requestId = null; this.streaming.set(false); this.stopping.set(false);
     }
   }
+  // Hunt quick-actions: canned prompts to the Attacker about THIS model×scenario's recon/breaks.
+  attackerQuick(prompt: string) { if (this.streaming() || this.batchBusy()) return; this.input = prompt; this.send(); }
   clearChat() { if (this.streaming()) return; this.view.set([]); this.convo = []; this.crafted.set(''); }
   async stop() {
     if (!this.streaming() || this.stopping()) return;

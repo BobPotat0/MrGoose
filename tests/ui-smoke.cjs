@@ -151,6 +151,7 @@ function clickText(text) {
   // ── 5) inspector: open a technique, edit it, save it ──
   step = 'organizer:inspector';
   await go(renderer, 'organizer');
+  check(await browser.evaluate("document.querySelectorAll('.quick-actions button').length >= 6"), 'Organizer quick-action buttons render');
   const techId = await browser.evaluate("fetch(window.mrgoose.backendUrl+'/api/techniques',{method:'POST',headers:{Authorization:'Bearer '+window.mrgoose.backendToken,'Content-Type':'application/json'},body:JSON.stringify({title:'UI smoke fixture',summary:'s',whenItWorks:'keep-this',example:'e',tags:'indirect'})}).then(r=>r.json()).then(t=>t.id)");
   check(!!techId, 'created a technique fixture via the API');
   await browser.evaluate(`fetch(window.mrgoose.backendUrl+'/api/control/organizer_run',{method:'POST',headers:{Authorization:'Bearer '+window.mrgoose.backendToken,'Content-Type':'application/json'},body:JSON.stringify({tool:'open_in_view',args:{kind:'technique',id:String(${techId})}})})`);
