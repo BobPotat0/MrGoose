@@ -574,7 +574,7 @@
       }
 
       <!-- RIGHT: craft agent (full width when the arena is detached) -->
-      <div class="pane scroll craft-panel">
+      <div class="pane scroll craft-panel" (dragover)="onDragOverRun($event)" (drop)="onDropRun($event)">
         @if (!arenaDocked()) {
           <mg-arena-pane (picked)="onPick($event)" (dockedChange)="arenaDocked.set($event)"></mg-arena-pane>
         }
@@ -832,6 +832,10 @@
               ><button class="btn" (click)="record('wall')">Wall</button
               ><button class="btn" (click)="record('partial')">Partial</button>
             </div>
+          </div>
+          <div class="row" style="gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap">
+            <button class="btn" (click)="analyzeRefusal()" title="One-shot: why did the last run fail?">Why did it fail?</button>
+            <input class="input grow" [(ngModel)]="flaggedBy" placeholder="flagged by (what walled it) — recorded with the verdict" style="font-size: 11px" />
           </div>
           <p class="dossier-summary">
             {{ factCount('filter') }} filters · {{ factCount('gate') }} gates ·

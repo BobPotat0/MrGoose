@@ -104,6 +104,7 @@ export class ApiService {
   addTurn(id: number, turn: Partial<ChatTurnDto>) { return firstValueFrom(this.http.post<ChatTurnDto>(this.url(`/api/finder/sessions/${id}/turns`), turn)); }
   judge(sessionId: number, reply: string) { return firstValueFrom(this.http.post<JudgeResult>(this.url('/api/finder/judge'), { sessionId, reply })); }
   judgeDirect(objective: string, criteria: string, reply: string, judgeContext = '') { return firstValueFrom(this.http.post<JudgeResult>(this.url('/api/judge-direct'), { objective, criteria, judgeContext, reply })); }
+  analyzeRefusal(model: string, scenario: string, refusal: string) { return firstValueFrom(this.http.post<{ why: string; error?: string }>(this.url('/api/attacker/analyze-refusal'), { model, scenario, refusal })); }
 
   // mr goose agent: system prompt + knowledge base
   organizerSystem() { return firstValueFrom(this.http.get<OrganizerSystem>(this.url('/api/organizer/system'))); }

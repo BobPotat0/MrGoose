@@ -100,6 +100,7 @@ export class WorkbenchPage {
   includeRecon = true;
   encMarked = false;
   input = ''; fillSel = '#chatTextarea'; newMarker = ''; promptDraft = ''; breakSearch = '';
+  flaggedBy = '';   // "why it failed" — set by the refusal analyzer, stored on the recorded injection
   arenaUrl = 'https://app.grayswan.ai/arena/challenge/ipi-black-2026';   // batch tabs open here (overridden from Settings)
   scaffold = ''; toolNs = ''; browser = false;
   factKind = 'filter'; factName = ''; factDetail = '';
@@ -542,7 +543,7 @@ export class WorkbenchPage {
     const primary = this.builderPrimary() || this.lastPayload();
     const partsJson = JSON.stringify(this.parts().map(p => ({ surface: p.surface, label: p.label, fields: p.fields.map(f => ({ name: f.name, value: f.value })) })));
     const surface = this.parts()[0]?.surface || (this.scenarios().find(s => s.code === this.scenarioCode)?.requiredSurface ?? '');
-    await this.api.dossierRecord(this.modelName, this.scenarioCode, 'record_injection', { name: 'crafted', surface, techniques: this.selTechs().size ? 'selected' : '', payload: primary, parts: partsJson, verdict: v, flagged_by: 'operator' });
+    await this.api.dossierRecord(this.modelName, this.scenarioCode, 'record_injection', { name: 'crafted', surface, techniques: this.selTechs().size ? 'selected' : '', payload: primary, parts: partsJson, verdict: v, flagged_by: this.flaggedBy || 'operator' });
     await this.api.setState({ slug: this.slug, model: this.modelName, scenarioCode: this.scenarioCode, verdict: v });
     await this.onSelect();
     this.toast.ok(`recorded ${v} (${this.parts().length} surface${this.parts().length === 1 ? '' : 's'})`);
@@ -563,10 +564,28 @@ export class WorkbenchPage {
   async record(v: string) {
     const p = this.lastPayload();
     const surface = this.scenarios().find(s => s.code === this.scenarioCode)?.requiredSurface ?? '';
-    if (p) await this.api.dossierRecord(this.modelName, this.scenarioCode, 'record_injection', { name: 'crafted', surface, techniques: '', payload: p, verdict: v, flagged_by: 'operator' });
+    if (p) await this.api.dossierRecord(this.modelName, this.scenarioCode, 'record_injection', { name: 'crafted', surface, techniques: '', payload: p, verdict: v, flagged_by: this.flaggedBy || 'operator' });
     await this.api.setState({ slug: this.slug, model: this.modelName, scenarioCode: this.scenarioCode, verdict: v });
     await this.onSelect();
     this.aStep.set('craft'); this.toast.ok(`recorded ${v}`);
+  }
+  // One-shot "why did it fail?": reads the victim reply + known gates/filters → fills flaggedBy.
+  async analyzeRefusal() {
+    const refusal = this.victim() || this.input.trim();
+    if (!refusal) { this.toast.err('read back or paste the victim reply first'); return; }
+    this.toast.info('analyzing why it failed…');
+    try { const r = await this.api.analyzeRefusal(this.modelName, this.scenarioCode, refusal); if (r.why) { this.flaggedBy = r.why; this.toast.ok('flagged: ' + r.why); } else this.toast.err(r.error || 'no result'); }
+    catch { this.toast.err('analyze failed'); }
+  }
+  // Drag run-export files (.json/.txt/.md/.log) onto the craft column → load into the composer for analysis.
+  onDragOverRun(ev: DragEvent) { if (ev.dataTransfer?.types?.includes('Files')) { ev.preventDefault(); } }
+  async onDropRun(ev: DragEvent) {
+    const files = Array.from(ev.dataTransfer?.files ?? []).filter(f => /\.(json|txt|md|log)$/i.test(f.name));
+    if (!files.length) return;
+    ev.preventDefault();
+    const parts: string[] = [];
+    for (const f of files) { try { parts.push(`===== ${f.name} =====\n${await f.text()}`); } catch { /* skip unreadable */ } }
+    if (parts.length) { this.input = (this.input ? this.input + '\n\n' : '') + parts.join('\n\n'); this.toast.ok(`loaded ${parts.length} run file(s) — review and send`); }
   }
   short(s: string) { return (s ?? '').length > 80 ? s.slice(0, 80) + '…' : (s ?? ''); }
 }
