@@ -73,6 +73,7 @@ export class ApiService {
 
   // attacker + dossier
   systemPrompt(sel: PromptSelection) { return firstValueFrom(this.http.post<{ prompt: string }>(this.url('/api/craft/system-prompt'), sel)); }
+  setDossierTemplate(model: string, scenario: string, template: string) { return firstValueFrom(this.http.put(this.url('/api/dossier/template'), { model, scenario, template })); }
   dossier(model: string, scenario: string) {
     return firstValueFrom(this.http.get<DossierState>(this.url(`/api/dossier?model=${encodeURIComponent(model)}&scenario=${encodeURIComponent(scenario)}`)));
   }

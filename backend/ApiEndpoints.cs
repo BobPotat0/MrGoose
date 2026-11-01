@@ -267,6 +267,17 @@ public static class ApiEndpoints
             return Results.Ok();
         });
 
+        // The operator's starting-base template for a model×scenario; the attacker builds its craft from it.
+        app.MapPut("/api/dossier/template", async (DossierTemplateDto dto, AttackerService craft, MrGooseDb db) =>
+        {
+            var st = await craft.EnsureStateAsync(dto.Model, dto.Scenario);
+            if (st is null) return Results.NotFound();
+            st.Template = dto.Template ?? "";
+            st.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok();
+        });
+
         // UI-driven dossier records reuse the same record_* tools the agent uses.
         app.MapPost("/api/dossier/record", async (DossierRecordDto dto, AttackerService craft) =>
             Results.Ok(new { result = await craft.ExecuteToolAsync(dto.Model, dto.Scenario, dto.Tool, dto.Args) }));
@@ -573,6 +584,7 @@ public static class ApiEndpoints
     public record SettingDto(string Key, string Value);
     public record KeyDto(string Name, string Value);
     public record DossierMetaDto(string Model, string Scenario, string? Scaffold, string? ToolNamespace, bool? Browser);
+    public record DossierTemplateDto(string Model, string Scenario, string Template);
     public record DossierRecordDto(string Model, string Scenario, string Tool, string Args);
     public record AnalyzeRefusalDto(string Model, string Scenario, string Refusal);
     public record JudgeDto(int SessionId, string Reply);

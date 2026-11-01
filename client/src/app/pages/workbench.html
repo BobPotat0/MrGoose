@@ -619,7 +619,7 @@
             >
               Reference prompts <span>{{ selBreaks().size }}</span>
             </button>
-            <button class="btn" (click)="openOverlay('blocks')">Building blocks ↗</button>
+            <button class="btn" (click)="openOverlay('blocks')">Template ↗</button>
             <button class="btn" (click)="openOverlay('techs')">
               Techniques <span>{{ selTechs().size }}</span>
             </button>
@@ -633,6 +633,9 @@
           </div>
           <label class="recon-option"
             ><input type="checkbox" [(ngModel)]="includeRecon" /> Include scenario recon</label
+          >
+          <label class="recon-option"
+            ><input type="checkbox" [(ngModel)]="autoTechniques" /> Auto-pick techniques from the library</label
           >
         </div>
         @if (craftMode() === 'direct') {
@@ -926,23 +929,30 @@
           }
 
           @if (overlay() === 'blocks') {
-            <p class="muted" style="font-size: 11px; margin-bottom: 6px">Click a block to insert it into the message.</p>
-            <div class="label-mono" style="margin: 8px 0 4px">System tags</div>
+            <p class="muted" style="font-size: 11px; margin-bottom: 6px">Build a <strong>template</strong> for {{ modelName || 'this model' }} × {{ scenarioCode || 'this scenario' }} — the attacker takes it as its starting base and adapts it. Saved per model × scenario.</p>
+            <textarea class="textarea mono" style="min-height: 240px; font-size: 12px" [(ngModel)]="templateDraft" placeholder="e.g. the skeleton of your injection — surface/field layout, the frame you keep, markers like {{ '{' }}{{ '{' }}customer{{ '}' }}{{ '}' }} to fill…"></textarea>
+            <div class="row" style="gap: 6px; margin-top: 8px">
+              <button class="btn primary" (click)="saveTemplate()">Save template</button>
+              <button class="btn" (click)="clearTemplate()" [disabled]="!templateDraft">Clear</button>
+              <span class="grow"></span>
+              <span class="muted" style="font-size: 11px">the attacker builds from this on every craft</span>
+            </div>
+            <div class="label-mono" style="margin: 14px 0 4px">Insert into the template</div>
             <div class="row" style="flex-wrap: wrap; gap: 6px">
               @for (t of systemTags; track t) {
-                <button class="btn mono" style="font-size: 11px" (click)="insertBlock(t)">{{ t }}</button>
+                <button class="btn mono" style="font-size: 11px" (click)="insertIntoTemplate(t)">{{ t }}</button>
               }
             </div>
-            <div class="label-mono" style="margin: 12px 0 4px">Escapes — JSON field breakout</div>
+            <div class="label-mono" style="margin: 10px 0 4px">Escapes — JSON field breakout</div>
             <div class="row" style="flex-wrap: wrap; gap: 6px">
               @for (e of escapes; track e) {
-                <button class="btn mono" style="font-size: 11px" (click)="insertBlock(e)">{{ e }}</button>
+                <button class="btn mono" style="font-size: 11px" (click)="insertIntoTemplate(e)">{{ e }}</button>
               }
             </div>
             @if (blocks().length) {
-              <div class="label-mono" style="margin: 12px 0 4px">Reusable blocks</div>
+              <div class="label-mono" style="margin: 10px 0 4px">Reusable blocks</div>
               @for (b of blocks(); track b.id) {
-                <button class="btn" style="display: block; width: 100%; text-align: left; margin-top: 6px" (click)="insertBlock(b.content)">
+                <button class="btn" style="display: block; width: 100%; text-align: left; margin-top: 6px" (click)="insertIntoTemplate(b.content)">
                   <span class="chip">{{ b.type }}</span> <span class="dim" style="font-size: 11.5px">{{ b.content }}</span>
                 </button>
               }

@@ -106,6 +106,7 @@ public class ScenarioState
     public string ScenarioCode { get; set; } = "";
     public string Verdict { get; set; } = "untested"; // break | wall | partial | untested | na
     public string Dossier { get; set; } = "";         // free-text per model×scenario notes
+    public string Template { get; set; } = "";         // operator's starting-base payload template the attacker builds from
     public string Scaffold { get; set; } = "";
     public string ToolNamespace { get; set; } = "";
     public bool Browser { get; set; }

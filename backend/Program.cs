@@ -74,6 +74,7 @@ using (var scope = app.Services.CreateScope())
     try { db.Database.ExecuteSqlRaw("ALTER TABLE Techniques ADD COLUMN RequiresEncoding INTEGER NOT NULL DEFAULT 0"); } catch { /* column already exists */ }
     try { db.Database.ExecuteSqlRaw("ALTER TABLE DossierFacts ADD COLUMN EvidenceRef TEXT NOT NULL DEFAULT ''"); } catch { /* column already exists */ }
     try { db.Database.ExecuteSqlRaw("ALTER TABLE DossierInjections ADD COLUMN PartsJson TEXT NOT NULL DEFAULT ''"); } catch { /* column already exists */ }
+    try { db.Database.ExecuteSqlRaw("ALTER TABLE ScenarioStates ADD COLUMN Template TEXT NOT NULL DEFAULT ''"); } catch { /* column already exists */ }
     Seeder.Run(db);
     TechniqueDefaults.EnsureBuiltins(db, overwrite: false);   // ensure built-ins + tags exist, but preserve operator edits (reset restores defaults)
     DesktopData.MarkVersion(dbPath, builder.Configuration["MRGOOSE_APP_VERSION"]);

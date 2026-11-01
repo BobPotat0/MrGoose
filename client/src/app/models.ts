@@ -36,7 +36,7 @@ export interface OrganizerSystem { prompt: string; isCustom: boolean; default: s
 export interface QuickActionDto { id: string; label: string; prompt: string; send: boolean; }
 
 export interface DossierState {
-  id: number; scenarioCode: string; verdict: string; dossier: string;
+  id: number; scenarioCode: string; verdict: string; dossier: string; template: string;
   scaffold: string; toolNamespace: string; browser: boolean;
   tools: DossierTool[]; facts: DossierFact[]; injections: DossierInjection[];
 }
@@ -46,7 +46,7 @@ export interface DossierFact { id: number; kind: string; name: string; detail: s
 export interface DossierInjection { id: number; name: string; surface: string; techniques: string; payload: string; verdict: string; flaggedBy: string; }
 export interface BuildingBlockDto { id: number; type: string; content: string; }
 export interface BreakItem { id: string; label: string; payload: string; techniques: string; }
-export interface PromptSelection { scenarioCode: string; modelName: string; techniqueIds: number[]; blockIds: number[]; breakIds: string[]; includeRecon: boolean; }
+export interface PromptSelection { scenarioCode: string; modelName: string; techniqueIds: number[]; blockIds: number[]; breakIds: string[]; includeRecon: boolean; autoTechniques: boolean; }
 
 export interface FinderSummary { id: number; name: string; modelName: string; objective: string; threshold: number; turns: number; best: number; updatedAt: string; }
 export interface ChatTurnDto { id: number; role: string; content: string; score: number | null; createdAt: string; }
