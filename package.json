@@ -12,6 +12,7 @@
     "dev:client": "npm --prefix client start",
     "dev:electron": "wait-on http://localhost:4200 && electron electron/main.js",
     "dev": "npm run build:backend && concurrently -k -n CLIENT,ELECTRON -c green,magenta \"npm:dev:client\" \"npm:dev:electron\"",
+    "test:ui": "node tests/ui-smoke.cjs",
     "dist:win": "node scripts/build-desktop.cjs win x64",
     "dist:mac": "node scripts/build-desktop.cjs mac",
     "dist:mac:intel": "node scripts/build-desktop.cjs mac x64"
