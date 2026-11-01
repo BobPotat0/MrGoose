@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('mrgoose', {
     show: () => ipcRenderer.invoke('mrgoose:tabs:show'),
     onChanged: (callback) => { const listener = (_event, tabs) => callback(tabs); ipcRenderer.on('mrgoose:tabs:changed', listener); return () => ipcRenderer.removeListener('mrgoose:tabs:changed', listener); },
     loadUrl: (tabId, url) => ipcRenderer.invoke('mrgoose:tabs:loadUrl', { tabId, url }),
+    navigate: (tabId, url) => ipcRenderer.invoke('mrgoose:tabs:navigate', { tabId, url }),
     setBounds: (rect) => ipcRenderer.invoke('mrgoose:tabs:setBounds', rect),
     setVisible: (visible) => ipcRenderer.invoke('mrgoose:tabs:setVisible', { visible }),
     detach: () => ipcRenderer.invoke('mrgoose:arena:detach'),

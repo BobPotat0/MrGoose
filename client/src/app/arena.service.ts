@@ -18,6 +18,8 @@ export class ArenaService {
   select(id: string): Promise<ArenaTab[]> { return this.m?.tabs.select(id) ?? Promise.resolve([]); }
   close(id: string): Promise<ArenaTab[]> { return this.m?.tabs.close(id) ?? Promise.resolve([]); }
   loadUrl(id: string, url: string) { return this.m?.tabs.loadUrl(id, url) ?? Promise.resolve(false); }
+  // Operator address-bar navigation (any web URL). Agent/MCP callers use loadUrl (arena-only).
+  navigate(id: string, url: string) { return this.m?.tabs.navigate(id, url) ?? Promise.resolve(false); }
   setBounds(rect: { x: number; y: number; width: number; height: number }) { return this.m?.tabs.setBounds(rect) ?? Promise.resolve(false); }
   setVisible(visible: boolean) { return this.m?.tabs.setVisible(visible) ?? Promise.resolve(false); }
   detach(): Promise<{ docked: boolean }> { return this.m?.tabs.detach?.() ?? Promise.resolve({ docked: true }); }

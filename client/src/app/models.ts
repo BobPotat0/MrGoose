@@ -82,6 +82,7 @@ export interface MrGooseApi {
     show?(): Promise<void>;
     onChanged?: (callback: (tabs: ArenaTab[]) => void) => () => void;
     loadUrl(id: string, url: string): Promise<boolean>;
+    navigate(id: string, url: string): Promise<boolean>;
     setBounds(rect: { x: number; y: number; width: number; height: number }): Promise<boolean>;
     setVisible(visible: boolean): Promise<boolean>;
     detach?: () => Promise<{ docked: boolean }>;

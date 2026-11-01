@@ -151,6 +151,15 @@ class ArenaBrowserService {
   select(id) { this.entry(id); this.activeTabId = id; this.visibility(); this.notify(); return this.list(); }
   close(id) { const t = this.entry(id); this.getWindow()?.contentView.removeChildView(t.view); t.view.webContents.close(); this.tabs.delete(id); if (id === this.activeTabId) this.activeTabId = this.tabs.keys().next().value || null; this.visibility(); this.notify(); return this.list(); }
   async loadUrl(id, url) { this.validateUrl(url); const t = this.entry(id); if (t.attemptId) fail('ATTEMPT_TAB_LOCKED'); await t.view.webContents.loadURL(url); return true; }
+  // Operator-initiated navigation from the address bar — any web URL (e.g. walking the login flow). This is
+  // reachable only from the renderer (the human UI); the agent/MCP path uses loadUrl, which stays arena-only.
+  async navigate(id, url) {
+    let u; try { u = new URL(url); } catch { fail('URL_DENIED'); }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') fail('URL_DENIED');
+    const t = this.entry(id); if (t.attemptId) fail('ATTEMPT_TAB_LOCKED');
+    await t.view.webContents.loadURL(u.toString());
+    return true;
+  }
   async page(id, operation, args = {}, navigation) {
     const t = this.entry(id);
     const execute = async () => {

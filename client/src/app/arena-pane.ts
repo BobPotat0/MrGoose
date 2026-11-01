@@ -1,4 +1,5 @@
 import { AfterViewInit, Component, ElementRef, EventEmitter, OnDestroy, Output, ViewChild, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ArenaService } from './arena.service';
 import { ApiService } from './api.service';
 import { ArenaTab } from './models';
@@ -10,6 +11,7 @@ import { ArenaTab } from './models';
  */
 @Component({
   selector: 'mg-arena-pane',
+  imports: [FormsModule],
   host: { '[class.compact]': '!docked()' },
   template: `
     @if (!available) {
@@ -35,10 +37,15 @@ import { ArenaTab } from './models';
         }
       </div>
 
-      @if (activeUrl()) {
+      @if (tabs().length) {
         <div class="row arena-url" style="gap: 6px; margin-bottom: 6px; align-items: center">
           <span class="label-mono" style="opacity: 0.6">url</span>
-          <input class="input mono" style="flex: 1; min-width: 0; font-size: 11px" [value]="activeUrl()" readonly (focus)="$any($event.target).select()" title="Current arena address — log in once here and the session stays signed in" />
+          <input class="input mono" style="flex: 1; min-width: 0; font-size: 11px"
+            [(ngModel)]="urlDraft" (focus)="urlFocused = true" (blur)="urlFocused = false; urlDraft = activeUrl()"
+            (keydown.enter)="go()" spellcheck="false" autocapitalize="off"
+            placeholder="https://… — type an address, Enter to go"
+            title="Address of the active arena tab. Edit and press Enter to navigate; log in once here and the session stays signed in." />
+          <button class="btn" (click)="go()" title="Go to this address">go</button>
         </div>
       }
 
@@ -69,6 +76,8 @@ export class ArenaPaneComponent implements AfterViewInit, OnDestroy {
   readonly docked = signal(true);
   readonly pickedSel = signal('');
   arenaUrl = 'https://app.grayswan.ai/arena/challenge/ipi-black-2026';
+  urlDraft = '';            // editable address bar for the active tab
+  urlFocused = false;       // don't overwrite the box while the operator is typing in it
 
   private unsubscribeTabs?: () => void;
   private unsubscribeDocked?: () => void;
@@ -81,7 +90,8 @@ export class ArenaPaneComponent implements AfterViewInit, OnDestroy {
     try { this.docked.set((await this.arena.state()).docked); } catch { /* not electron */ }
     this.dockedChange.emit(this.docked());
     this.tabs.set(await this.arena.list());
-    this.unsubscribeTabs = this.arena.onChanged(tabs => this.tabs.set(tabs));
+    this.urlDraft = this.activeUrl();
+    this.unsubscribeTabs = this.arena.onChanged(tabs => { this.tabs.set(tabs); if (!this.urlFocused) this.urlDraft = this.activeUrl(); });
     this.unsubscribeDocked = this.arena.onDocked(s => { this.docked.set(s.docked); this.dockedChange.emit(s.docked); this.syncView(); });
     window.addEventListener('resize', this.onViewportChange);
     window.addEventListener('scroll', this.onViewportChange, true);
@@ -122,5 +132,15 @@ export class ArenaPaneComponent implements AfterViewInit, OnDestroy {
   async detach() { this.docked.set((await this.arena.detach()).docked); this.dockedChange.emit(this.docked()); this.syncView(); }
   async dock() { this.docked.set((await this.arena.dock()).docked); this.dockedChange.emit(this.docked()); this.syncView(); }
   async pick() { const r = await this.arena.pick(); if (r.selector) { this.pickedSel.set(r.selector); this.picked.emit(r.selector); } }
+  // Operator address-bar navigation — any web URL (login flow etc.). Automation stays arena-only server-side.
+  async go() {
+    const url = this.normalizeUrl(this.urlDraft.trim());
+    if (!url) return;
+    const active = this.tabs().find(t => t.active) ?? this.tabs()[0];
+    if (!active) return;
+    try { await this.arena.navigate(active.id, url); this.tabs.set(await this.arena.list()); }
+    catch { /* invalid or blocked address — leave the box as typed */ }
+  }
+  private normalizeUrl(v: string): string { return v ? (/^https?:\/\//i.test(v) ? v : 'https://' + v) : ''; }
   short(s: string) { return s.length > 16 ? s.slice(0, 16) + '…' : s; }
 }

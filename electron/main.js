@@ -96,6 +96,7 @@ function registerBridge() {
   handle('mrgoose:tabs:close', ({ tabId }) => arena.close(tabId));
   handle('mrgoose:tabs:list', () => arena.list());
   handle('mrgoose:tabs:loadUrl', ({ tabId, url }) => arena.loadUrl(tabId, url));
+  handle('mrgoose:tabs:navigate', ({ tabId, url }) => arena.navigate(tabId, url));
   // Docked: the cockpit pane positions and shows the embedded view. Detached: the Arena window owns bounds.
   handle('mrgoose:tabs:setBounds', (rect) => { dockedBounds = rect; if (arenaDocked) arena.setBounds(rect); return true; });
   handle('mrgoose:tabs:setVisible', ({ visible }) => { if (arenaDocked) { dockedHostMounted = !!visible; arena.setVisible(visible); } return true; });
