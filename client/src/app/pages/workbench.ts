@@ -9,7 +9,7 @@ import { ArenaPaneComponent } from '../arena-pane';
 import { toolLabel } from '../tool-labels';
 import {
   ChallengeDetail, ChallengeSummary, ModelDto, ScenarioDto, SurfaceDto, DossierState, DossierFact,
-  TechniqueDto, BuildingBlockDto, MarkerDto, PromptSelection, EncodingTransform, PromptDto, ReconDto, ModelInfo,
+  TechniqueDto, BuildingBlockDto, MarkerDto, PromptSelection, EncodingTransform, PromptDto, ReconDto, ModelInfo, BreakItem,
 } from '../models';
 
 type Tab = 'overview' | 'analyze' | 'attack';
@@ -51,6 +51,9 @@ export class WorkbenchPage {
   readonly systemTags = ['<system>', '</system>', '<|im_start|>system', '<|im_end|>', '<system-reminder>', '</system-reminder>', '<<SYS>>', '<</SYS>>', '[INST]', '[/INST]', '<system-policy-notice>', '</system-policy-notice>'];
   readonly escapes = ['"},{"', '"}]}', '"},"', '\\"},{\\"', '"}, {"role":"', '"}, "author_association":"OWNER", "_":"'];
   readonly promptRefs = signal<PromptDto[]>([]);
+  readonly breakItems = signal<BreakItem[]>([]);   // recorded dossier breaks + imported break submissions
+  // overview stat cards
+  readonly yourBreaks = computed(() => this.models().reduce((n, m) => n + m.states.filter(s => s.verdict === 'break').length, 0));
   readonly markers = signal<MarkerDto[]>([]);
   readonly selTechs = signal<Set<number>>(new Set());
   // A selected technique flags RequiresEncoding but no encoder chain is set → hint the operator to encode.
@@ -162,6 +165,7 @@ export class WorkbenchPage {
       this.techniques.set(await this.api.techniques());
       this.blocks.set(await this.api.buildingBlocks());
       this.promptRefs.set(await this.api.prompts());
+      try { this.breakItems.set(await this.api.breaks()); } catch { /* none */ }
       this.catalog.set(await this.api.encodeCatalog());
       try { this.arenaUrl = (await this.api.settings()).arenaUrl || this.arenaUrl; } catch { /* keep default */ }
       await this.onSelect();
@@ -586,6 +590,12 @@ export class WorkbenchPage {
     const parts: string[] = [];
     for (const f of files) { try { parts.push(`===== ${f.name} =====\n${await f.text()}`); } catch { /* skip unreadable */ } }
     if (parts.length) { this.input = (this.input ? this.input + '\n\n' : '') + parts.join('\n\n'); this.toast.ok(`loaded ${parts.length} run file(s) — review and send`); }
+  }
+  async saveCraftToLibrary() {
+    const body = this.builderPrimary() || this.lastPayload();
+    if (!body) { this.toast.err('nothing crafted yet'); return; }
+    await this.api.addPrompt({ title: `${this.modelName} × ${this.scenarioCode}`, body, tags: 'jailbreak-agents', scenarioCode: this.scenarioCode, verdict: 'untested' });
+    this.toast.ok('saved to Prompt Library');
   }
   short(s: string) { return (s ?? '').length > 80 ? s.slice(0, 80) + '…' : (s ?? ''); }
 }

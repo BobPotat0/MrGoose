@@ -97,6 +97,12 @@
       </details>
     </div>
     @if (detail(); as d) {
+      <div class="row stat-cards" style="gap: 10px; flex-wrap: wrap; margin-bottom: 10px">
+        <div class="card stat-card"><span class="stat-num">{{ d.totalBreaks }}</span><span class="label-mono">total breaks</span></div>
+        <div class="card stat-card"><span class="stat-num">{{ d.models.length }}</span><span class="label-mono">agents</span></div>
+        <div class="card stat-card"><span class="stat-num">{{ d.scenarios.length }}</span><span class="label-mono">scenarios</span></div>
+        <div class="card stat-card"><span class="stat-num">{{ yourBreaks() }}</span><span class="label-mono">your breaks</span></div>
+      </div>
       <!-- single break matrix: all models by global breaks, with your breaks + manual wave assignment -->
       <div class="card matrix-card">
         <div class="row spread matrix-title">
@@ -782,7 +788,8 @@
               Fill →</button
             ><button class="btn" (click)="readBack()" [disabled]="!arena.available">
               Read back</button
-            ><button class="btn" (click)="judge()">Judge</button>
+            ><button class="btn" (click)="judge()">Judge</button
+            ><button class="btn" (click)="saveCraftToLibrary()">Save to library</button>
           </div>
           <details class="target-details">
             <summary>
@@ -893,6 +900,17 @@
               <p class="muted" style="font-size: 12px; margin-top: 8px">
                 No matching prompts. Save winning payloads in the Prompt Library first.
               </p>
+            }
+            @if (breakItems().length) {
+              <div class="label-mono" style="margin: 12px 0 2px">Recorded breaks (this challenge's dossier)</div>
+              @for (b of breakItems(); track b.id) {
+                <label class="row" style="gap: 8px; margin-top: 7px; align-items: flex-start"
+                  ><input type="checkbox" [checked]="selBreaks().has(b.id)" (change)="pick(selBreaks, b.id)" />
+                  <span><span class="chip lime">break</span> <strong style="font-size: 12.5px">{{ b.label }}</strong>
+                    @if (b.techniques) { <span class="mono dim" style="font-size: 11px"> · {{ b.techniques }}</span> }
+                  </span></label
+                >
+              }
             }
           }
 

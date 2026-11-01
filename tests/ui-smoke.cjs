@@ -124,6 +124,7 @@ function clickText(text) {
   // ── 2) workbench tabs switch ──
   step = 'workbench:tabs';
   await go(renderer, 'workbench');
+  check(await browser.evaluate("document.querySelectorAll('.stat-card').length >= 4"), 'Overview shows the stat cards');
   for (const label of ['Overview', 'Recon', 'Find Break']) {
     check(await clickText(label), `workbench tab "${label}" is clickable`);
     await until(() => browser.evaluate(`document.querySelector('nav button[aria-pressed="true"]')?.textContent.trim() === ${JSON.stringify(label)}`), 8000, `tab ${label} active`);

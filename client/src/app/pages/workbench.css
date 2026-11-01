@@ -347,6 +347,18 @@
 .record-actions {
   justify-content: space-between;
 }
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  min-width: 96px;
+}
+.stat-card .stat-num {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+}
 .batch-actions {
   display: flex;
   flex-direction: column;
