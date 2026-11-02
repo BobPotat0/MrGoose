@@ -608,8 +608,8 @@
         }
         <div class="card source-card">
           <div class="row spread">
-            <h2>Craft context</h2>
-            <span class="dim context-hint">Choose your sources</span>
+            <h2>Setup</h2>
+            <button class="btn" (click)="newSession()" [disabled]="!!batchBusy()" title="Open a fresh arena tab at the challenge and reset the craft workspace for a new attempt (fill-only — you still launch/submit)">+ New session</button>
           </div>
           <div class="source-grid">
             <button
@@ -622,6 +622,9 @@
             <button class="btn" (click)="openOverlay('blocks')">Template ↗</button>
             <button class="btn" (click)="openOverlay('techs')">
               Techniques <span>{{ selTechs().size }}</span>
+            </button>
+            <button class="btn" [class.primary]="encKeys().length > 0 || encMarked" (click)="openOverlay('enc')" title="Encode the primary field before filling">
+              Encoder <span>{{ encKeys().length }}{{ encMarked ? '+' : '' }}</span>
             </button>
             <button class="btn" (click)="openOverlay('tools')">
               Tool calls / forge <span>{{ dossier()?.tools?.length || 0 }}</span>
@@ -637,6 +640,17 @@
           <label class="recon-option"
             ><input type="checkbox" [(ngModel)]="autoTechniques" /> Auto-pick techniques from the library</label
           >
+          <div class="batch-actions" style="margin-top: 10px">
+            <div class="row spread">
+              <span class="label-mono">Batch — multi-tab</span>
+              @if (batchBusy()) { <span class="mono dim" style="font-size: 11px">{{ batchBusy() }}</span> }
+            </div>
+            <div class="row" style="gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px">
+              <label class="row" style="gap: 4px; align-items: center; font-size: 12px">tabs<input
+                class="input" type="number" min="1" max="12" [(ngModel)]="tabCount" style="width: 48px" /></label>
+            </div>
+            <p class="dim" style="font-size: 11px; margin-top: 4px">How many arena tabs <strong>🌐 Fill website</strong> (in the builder) opens. <strong>1</strong> = fill the current tab · <strong>2+</strong> = open that many fresh tabs, each with the current craft. Submit stays manual.</p>
+          </div>
         </div>
         @if (craftMode() === 'direct') {
         <div class="card craft-transcript" aria-label="Craft conversation">
@@ -708,7 +722,7 @@
         <div class="card craft-transcript" aria-label="MCP mode">
           <p class="label-mono" style="color: var(--amber)">Attacker runs via MCP</p>
           <p class="dim" style="font-size: 12.5px; line-height: 1.55; margin-top: 6px">
-            Your external Claude/GPT does the crafting. It pulls the <strong>Craft context</strong> above
+            Your external Claude/GPT does the crafting. It pulls the <strong>Setup</strong> above
             through the <span class="mono">read_attack_context</span> MCP tool, then fills the arena with
             <span class="mono">attempt_prepare</span>. No in-app chat here —
             <strong>Launch/Submit always stays manual</strong>.
@@ -774,7 +788,7 @@
             } @empty { <p class="dim" style="font-size: 11px; margin-top: 6px">No surfaces — click "+ surface" (this scenario may declare none).</p> }
             <div class="row" style="gap: 6px; margin-top: 8px; flex-wrap: wrap; align-items: center">
               <button class="btn primary" (click)="craftAttack()" [disabled]="streaming() || !!batchBusy()">✦ Craft Attack</button
-              ><button class="btn primary" (click)="fillWebsite()" [disabled]="!arena.available || !builderHasContent() || filling()">{{ filling() ? 'filling…' : '🌐 Fill website →' }}</button>
+              ><button class="btn primary" (click)="fillWebsite()" [disabled]="!arena.available || !builderHasContent() || filling()">{{ filling() ? 'filling…' : (tabCountN() > 1 ? '🌐 Fill website → ' + tabCountN() + ' tabs' : '🌐 Fill website →') }}</button>
               <span class="grow"></span>
               <span class="dim" style="font-size: 11px">Record:</span>
               <button class="btn verdict-break" (click)="recordSubmission('break')" [disabled]="!builderHasContent()">Break</button
@@ -782,6 +796,12 @@
               ><button class="btn" (click)="recordSubmission('partial')" [disabled]="!builderHasContent()">Partial</button>
             </div>
             <p class="dim" style="font-size: 11px; margin-top: 4px">The craft auto-loads here; <strong>Fill website</strong> drops every field into its matching arena field (fill-only) — you launch/submit yourself. Per-field <strong>copy</strong> is the manual fallback. 🔒 locks a field so the attacker leaves it to you.</p>
+            <div class="row" style="gap: 6px; margin-top: 6px; flex-wrap: wrap; align-items: center">
+              <span class="dim" style="font-size: 11px">After you launch in the arena:</span>
+              <button class="btn" style="font-size: 11px" (click)="readBack()" [disabled]="!arena.available" title="Snapshot the victim's reply from the arena page">④ Read back</button
+              ><button class="btn" style="font-size: 11px" (click)="judge()" title="Score the read-back reply with the scenario judge">Judge</button
+              ><button class="btn" style="font-size: 11px" (click)="saveCraftToLibrary()" title="Save this craft to the Prompt Library">Save to library</button>
+            </div>
             @if (usedTechniques().length) {
               <div class="row" style="flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center">
                 <span class="label-mono" style="font-size: 11px">⚔ techniques used:</span>
@@ -794,71 +814,6 @@
                 <div class="row spread" style="margin-top: 4px"><span class="mono dim" style="font-size: 11px">{{ snapTime(s.at) }} · {{ s.parts.length }} surface(s)</span><button class="btn" (click)="restoreSnap(s.id)">restore</button></div>
               }
             }
-          </div>
-          <div class="payload-actions">
-            <span class="label-mono">Payload</span
-            ><button
-              class="btn"
-              [class.primary]="encKeys().length > 0 || encMarked"
-              (click)="openOverlay('enc')"
-              title="Encode payload before filling"
-            >
-              Encode ({{ encKeys().length }}{{ encMarked ? ', [ENC]' : '' }})</button
-            ><button class="btn" (click)="fillIntoTab()" [disabled]="!arena.available">
-              Fill →</button
-            ><button class="btn" (click)="readBack()" [disabled]="!arena.available">
-              Read back</button
-            ><button class="btn" (click)="judge()">Judge</button
-            ><button class="btn" (click)="saveCraftToLibrary()">Save to library</button>
-          </div>
-          <details class="target-details">
-            <summary>
-              Fill target <span class="mono">{{ fillSel || 'Choose an element' }}</span>
-            </summary>
-            <label class="field"
-              >Pick an element in Arena, or enter a CSS selector<input
-                class="input"
-                [(ngModel)]="fillSel"
-                placeholder="#chatTextarea"
-            /></label>
-          </details>
-          <div class="batch-actions">
-            <div class="row spread">
-              <span class="label-mono">Batch — multi-tab</span>
-              @if (batchBusy()) { <span class="mono dim" style="font-size: 11px">{{ batchBusy() }}</span> }
-            </div>
-            <div class="row" style="gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px">
-              <label class="row" style="gap: 4px; align-items: center; font-size: 12px">tabs<input
-                class="input" type="number" min="1" max="8" [(ngModel)]="batchCount" style="width: 54px" /></label>
-              <button class="btn" (click)="addCurrentToBatch()" [disabled]="!!batchBusy()">+ add current</button
-              ><button class="btn" (click)="addCopies()" [disabled]="!!batchBusy()">× N copies</button
-              ><button class="btn" (click)="generateVariants()" [disabled]="streaming() || !!batchBusy()">Generate N variants</button>
-            </div>
-            @if (batch().length) {
-              <div class="batch-list">
-                @for (e of batch(); track e.id) {
-                  <div class="row spread batch-row">
-                    <span class="mono dim" style="font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ e.label }} · {{ batchPreview(e.payload) }}</span>
-                    <a (click)="removeBatchEntry(e.id)" title="Remove from batch" style="cursor: pointer">✕</a>
-                  </div>
-                }
-              </div>
-              <div class="row" style="gap: 6px; margin-top: 6px">
-                <button class="btn primary" (click)="fillBatch()" [disabled]="!arena.available || !!batchBusy()">Fill batch → {{ batch().length }} tab(s)</button
-                ><button class="btn" (click)="clearBatch()" [disabled]="!!batchBusy()">Clear</button>
-              </div>
-              <p class="dim" style="font-size: 11px; margin-top: 4px">Opens fresh arena tabs and fills only — you launch/submit each tab manually.</p>
-            } @else {
-              <p class="dim" style="font-size: 11px; margin-top: 4px">Add the current craft (or ×N copies / generated variants), then fill each into its own fresh arena tab. Submit stays manual.</p>
-            }
-          </div>
-          <div class="record-actions">
-            <span class="label-mono">Record verdict</span>
-            <div class="row">
-              <button class="btn verdict-break" (click)="record('break')">Break</button
-              ><button class="btn" (click)="record('wall')">Wall</button
-              ><button class="btn" (click)="record('partial')">Partial</button>
-            </div>
           </div>
           <div class="row" style="gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap">
             <button class="btn" (click)="analyzeRefusal()" title="One-shot: why did the last run fail?">Why did it fail?</button>

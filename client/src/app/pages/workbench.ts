@@ -9,7 +9,7 @@ import { ArenaPaneComponent } from '../arena-pane';
 import { toolLabel } from '../tool-labels';
 import {
   ChallengeDetail, ChallengeSummary, ModelDto, ScenarioDto, SurfaceDto, DossierState, DossierFact,
-  TechniqueDto, BuildingBlockDto, MarkerDto, PromptSelection, EncodingTransform, PromptDto, ReconDto, BreakItem,
+  TechniqueDto, BuildingBlockDto, MarkerDto, PromptSelection, EncodingTransform, PromptDto, ReconDto, BreakItem, PageField,
 } from '../models';
 import { ModelSettingsComponent } from '../model-settings.component';
 
@@ -17,7 +17,6 @@ type Tab = 'overview' | 'analyze' | 'attack';
 type AStep = 'craft' | 'fill' | 'launch' | 'read' | 'record';
 type Overlay = '' | 'blocks' | 'breaks' | 'techs' | 'tools' | 'markers' | 'prompt' | 'enc';
 type ViewItem = { type: 'user' | 'assistant' | 'tool'; text: string; reasoning?: string; reasoningOpen?: boolean };
-type BatchEntry = { id: string; payload: string; label: string };
 type IField = { name: string; value: string; multiline: boolean; primary: boolean; selector?: string; locked?: boolean };
 type IPart = { id: string; surface: string; label: string; fields: IField[] };
 type CraftSnap = { id: string; at: number; parts: IPart[] };
@@ -85,10 +84,9 @@ export class WorkbenchPage {
   readonly stopping = signal(false);
   readonly crafted = signal('');
   readonly victim = signal('');
-  // Batch (multi-tab): queue several payloads (copies or attacker-generated variants) and fill each into
-  // its own FRESH arena tab. Fill-only — the operator launches/submits every tab by hand.
-  readonly batch = signal<BatchEntry[]>([]);
-  batchCount = 3;
+  // Batch (multi-tab): open N fresh arena tabs and fill each with the CURRENT builder craft (fill-only — the
+  // operator launches every tab by hand). No variant generation.
+  tabCount = 3;      // how many fresh arena tabs "Create tabs" opens, each filled with the current craft
   readonly batchBusy = signal('');
   // Multi-surface injection builder: author a submission field-by-field across the scenario's surfaces.
   readonly parts = signal<IPart[]>([]);
@@ -184,9 +182,23 @@ export class WorkbenchPage {
       const d = await this.api.dossier(this.modelName, this.scenarioCode);
       this.dossier.set(d); this.scaffold = d.scaffold; this.toolNs = d.toolNamespace; this.browser = d.browser; this.templateDraft = d.template || '';
     }
-    if (!this.builderHasContent()) this.rebuildBuilder();   // seed the multi-surface builder from the scenario
+    // Seed the builder live from the real arena page (always-live); fall back to the scenario schema off-page.
+    if (!this.builderHasContent()) { if (!(await this.loadLiveFields(true))) this.rebuildBuilder(); }
   }
   openAttack(model: string, code: string) { this.modelName = model; this.scenarioCode = code; this.aStep.set('craft'); this.tab.set('attack'); this.parts.set([]); this.usedTechniques.set([]); if (!this.input.trim()) this.input = STARTER_PROMPT; this.onSelect(); }
+  // Start a fresh attempt: open a new arena tab at the challenge, reset the craft workspace, re-seed live fields.
+  // Fill-only as ever — no launch/submit. The batch queue is left intact (it spans sessions).
+  async newSession() {
+    if (this.arena.available) {
+      const tabId = await this.arena.create(this.arenaUrl);
+      if (tabId) await this.arena.select(tabId); else this.toast.err('could not open an arena tab');
+    }
+    this.view.set([]); this.convo = []; this.crafted.set(''); this.victim.set('');
+    this.parts.set([]); this.usedTechniques.set([]); this.craftSnaps.set([]);
+    this.aStep.set('craft'); this.input = STARTER_PROMPT;
+    await this.onSelect();   // re-seeds the builder live from the fresh tab
+    this.toast.ok(this.arena.available ? 'new session — fresh arena tab' : 'workspace reset');
+  }
   async onChallenge(slug: string) {
     this.slug = slug;
     this.detail.set(await this.api.challenge(slug));
@@ -373,74 +385,26 @@ export class WorkbenchPage {
   }
 
   // ───────────────────────── batch (multi-tab) ─────────────────────────
-  private clampN() { return Math.max(1, Math.min(8, Math.round(this.batchCount) || 1)); }
-  addCurrentToBatch() {
-    const p = this.lastPayload(); if (!p) { this.toast.err('nothing crafted yet'); return; }
-    this.batch.update(b => [...b, { id: crypto.randomUUID(), payload: p, label: `payload ${b.length + 1}` }]);
-    this.toast.ok('added to batch');
-  }
-  addCopies() {
-    const p = this.lastPayload(); if (!p) { this.toast.err('nothing crafted yet'); return; }
-    const n = this.clampN();
-    this.batch.update(b => [...b, ...Array.from({ length: n }, (_, i) => ({ id: crypto.randomUUID(), payload: p, label: `copy ${b.length + i + 1}` }))]);
-    this.toast.ok(`added ${n} cop${n === 1 ? 'y' : 'ies'}`);
-  }
-  removeBatchEntry(id: string) { this.batch.update(b => b.filter(x => x.id !== id)); }
-  clearBatch() { this.batch.set([]); }
-  batchPreview(p: string) { const s = p.replace(/\s+/g, ' ').trim(); return s.length > 90 ? s.slice(0, 90) + '…' : s; }
+  private clonePartsDeep(src: IPart[] = this.parts()): IPart[] { return src.map(p => ({ ...p, fields: p.fields.map(f => ({ ...f })) })); }
+  tabCountN() { return Math.max(1, Math.min(12, Math.round(this.tabCount) || 1)); }
 
-  // Ask the attacker for N DISTINCT variants, sequentially, into the batch. Ephemeral messages — the main chat stays clean.
-  async generateVariants() {
-    if (this.streaming() || this.batchBusy()) return;
-    const n = this.clampN();
-    let system: string;
-    try { system = this.promptDraft.trim() ? this.promptDraft : (await this.api.systemPrompt(this.selection())).prompt; }
-    catch { this.toast.err('could not build system prompt'); return; }
-    for (let k = 1; k <= n; k++) {
-      this.batchBusy.set(`generating variant ${k}/${n}…`);
-      const prior = this.batch().map((b, i) => `Variant ${i + 1}:\n${b.payload}`).join('\n\n');
-      const messages: ChatMsg[] = [...this.convo, { role: 'user', content:
-        `Craft variant #${k}: a DISTINCT injection from any already produced (vary technique / framing / surface wording). Output ONLY the final payload.${prior ? '\n\nAlready produced:\n' + prior : ''}` }];
-      const payload = await this.runOneCraft(system, messages);
-      if (payload) this.batch.update(b => [...b, { id: crypto.randomUUID(), payload, label: `variant ${b.length + 1}` }]);
-    }
-    this.batchBusy.set('');
-    this.toast.ok('variants added to batch');
-  }
-  // One non-persisted craft turn; resolves with the extracted payload.
-  private runOneCraft(system: string, messages: ChatMsg[]): Promise<string> {
-    return new Promise<string>(resolve => {
-      let buf = '';
-      void this.backend.attackerSend(
-        { requestId: crypto.randomUUID(), scenarioCode: this.scenarioCode, modelName: this.modelName, systemPrompt: system, messages },
-        tok => { buf += tok; },
-        () => {},
-        () => resolve(this.extract(buf)),
-        () => {},
-      );
-    });
-  }
-
-  // Open one FRESH arena tab per batch entry and fill it (encoded like the single fill). Never submits.
-  async fillBatch() {
-    const entries = this.batch();
-    if (!entries.length || this.batchBusy()) return;
-    if (!this.arena.available) { this.toast.err('embedded arena is Electron-only'); return; }
-    const enc = this.encKeys().length > 0 || this.encMarked;
-    let ok = 0;
-    for (let k = 0; k < entries.length; k++) {
-      this.batchBusy.set(`opening & filling tab ${k + 1}/${entries.length}…`);
-      let p = entries[k].payload;
-      if (enc) { try { p = (await this.api.encodeChain(this.encKeys(), p, this.encMarked)).result; } catch { /* fall back to raw */ } }
+  // Open n FRESH arena tabs and fill each with the given fields (every field via its live selector, encoding the
+  // primary). Driven by "Fill website" when tabs > 1. Never submits — the operator launches each tab by hand.
+  private async fillManyTabs(fields: { name: string; value: string; primary: boolean; selector?: string }[], n: number) {
+    let tabsFilled = 0;
+    for (let k = 0; k < n; k++) {
+      this.batchBusy.set(`opening & filling tab ${k + 1}/${n}…`);
       const tabId = await this.arena.create(this.arenaUrl);
       if (!tabId) { this.toast.err('could not open an arena tab'); break; }
-      if (await this.fillWhenReady(this.fillSel, p, tabId)) ok++;
+      const editable = await this.resolveEditable(tabId);
+      const { filled } = await this.fillFieldsIntoTab(fields, tabId, editable);
+      if (filled) tabsFilled++;
     }
     this.batchBusy.set('');
-    if (ok > 0) { this.aStep.set('launch'); this.toast.ok(`filled ${ok}/${entries.length} tab(s) — review, then launch/submit each yourself`); }
-    else this.toast.err('nothing filled — check the arena page / fill target');
+    if (tabsFilled > 0) { this.aStep.set('launch'); this.toast.ok(`filled ${tabsFilled}/${n} tab(s) — review, then launch/submit each yourself`); }
+    else this.toast.err('nothing filled — check the arena page / builder fields');
   }
-  // A freshly opened tab may still be loading the arena page; retry the fill until the field exists.
+  // A freshly opened tab may still be loading; retry the fill until the field exists.
   private async fillWhenReady(sel: string, val: string, tabId: string): Promise<boolean> {
     for (let i = 0; i < 5; i++) {
       const r = await this.arena.fill(sel, val, tabId);
@@ -448,6 +412,37 @@ export class WorkbenchPage {
       await new Promise(res => setTimeout(res, 400));
     }
     return false;
+  }
+  // Inspect a tab's live editable fields, retrying while a freshly opened tab is still loading.
+  private async resolveEditable(tabId: string): Promise<PageField[]> {
+    for (let i = 0; i < 6; i++) {
+      const insp = await this.arena.inspect(tabId);
+      const editable = (insp.ok ? insp.fields : [])?.filter(f => f.editable) ?? [];
+      if (editable.length) return editable;
+      await new Promise(res => setTimeout(res, 400));
+    }
+    return [];
+  }
+  // Fill a set of builder fields into one tab: by each field's stored live selector first, else by matching its
+  // name/id/label against the inspected form. Encodes the primary field when an encoder chain is set.
+  private async fillFieldsIntoTab(fields: { name: string; value: string; primary: boolean; selector?: string }[], tabId: string, editable: PageField[]): Promise<{ filled: number; missed: string[]; used: Set<string> }> {
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const match = (name: string) => {
+      const n = norm(name);
+      return editable.find(pf => norm(pf.name) === n || norm(pf.id) === n || norm(pf.label) === n)
+        ?? editable.find(pf => n && (norm(pf.name).includes(n) || norm(pf.label).includes(n)));
+    };
+    const enc = this.encKeys().length > 0 || this.encMarked;
+    const used = new Set<string>(); let filled = 0; const missed: string[] = [];
+    for (const f of fields) {
+      const sel = f.selector || match(f.name)?.selector;
+      if (!sel || used.has(sel)) { missed.push(f.name); continue; }
+      used.add(sel);
+      let val = f.value;
+      if (enc && f.primary) { try { val = (await this.api.encodeChain(this.encKeys(), val, this.encMarked)).result; } catch { /* raw */ } }
+      if (await this.fillWhenReady(sel, val, tabId)) filled++; else missed.push(f.name);
+    }
+    return { filled, missed, used };
   }
 
   // ───────────────────────── multi-surface injection builder ─────────────────────────
@@ -471,15 +466,20 @@ export class WorkbenchPage {
   }
   // Read the REAL fields (and their exact selectors) from the live arena form, so the builder always matches
   // the current page even if Gray Swan changes it. Existing values are preserved by field name.
-  async syncFieldsFromWebsite() {
-    if (this.filling() || !this.arena.available) { if (!this.arena.available) this.toast.err('embedded arena is Electron-only'); return; }
+  async syncFieldsFromWebsite() { await this.loadLiveFields(false); }
+  // Read the REAL fields (and exact selectors) from the live arena form so the builder always matches the current
+  // page even if Gray Swan changes it. Existing values are preserved by field name. `silent` suppresses toasts for
+  // the auto-seed path. Returns whether live fields were loaded.
+  private async loadLiveFields(silent: boolean): Promise<boolean> {
+    if (this.filling()) return false;
+    if (!this.arena.available) { if (!silent) this.toast.err('embedded arena is Electron-only'); return false; }
     const tabId = (await this.arena.list()).find(t => t.active)?.id;
-    if (!tabId) { this.toast.err('open an arena tab first'); return; }
+    if (!tabId) { if (!silent) this.toast.err('open an arena tab first'); return false; }
     this.filling.set(true);
     try {
       const insp = await this.arena.inspect(tabId);
       const pageFields = insp.fields?.filter(f => f.editable) ?? [];
-      if (!insp.ok || !pageFields.length) { this.toast.err(insp.note || 'could not read the arena form — is the challenge page loaded?'); return; }
+      if (!insp.ok || !pageFields.length) { if (!silent) this.toast.err(insp.note || 'could not read the arena form — is the challenge page loaded?'); return false; }
       const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       const prev = new Map<string, string>();
       for (const p of this.parts()) for (const f of p.fields) if (f.value.trim()) prev.set(norm(f.name), f.value);
@@ -491,14 +491,15 @@ export class WorkbenchPage {
         const multiline = pf.tag === 'textarea' || /body|message|content|html|text|note|description/i.test(name);
         fields.push({ name, value: prev.get(key) || '', multiline, primary: false, selector: pf.selector });
       }
-      if (!fields.length) { this.toast.err('no editable fields found on the page'); return; }
+      if (!fields.length) { if (!silent) this.toast.err('no editable fields found on the page'); return false; }
       const pIdx = fields.findIndex(f => /(^|_)body$|message|content/i.test(f.name));
       fields[pIdx >= 0 ? pIdx : 0].primary = true;
       const surf = this.scenarioSurfaces().find(s => s.required) ?? this.scenarioSurfaces()[0];
       this.snapshotBuilder();
       this.parts.set([{ id: crypto.randomUUID(), surface: surf?.key || 'website', label: surf?.label || 'live form', fields }]);
       this.aStep.set('craft');
-      this.toast.ok(`loaded ${fields.length} field(s) from the live page`);
+      if (!silent) this.toast.ok(`loaded ${fields.length} field(s) from the live page`);
+      return true;
     } finally { this.filling.set(false); }
   }
   addSurface(su: SurfaceDto) { this.parts.update(p => [...p, this.partFromSurface(su)]); this.surfacePickerOpen.set(false); }
@@ -521,32 +522,18 @@ export class WorkbenchPage {
     if (!this.arena.available) { this.toast.err('embedded arena is Electron-only'); return; }
     const fields = this.parts().flatMap(p => p.fields.filter(f => f.value.trim()).map(f => ({ name: f.name, value: f.value, primary: f.primary, selector: f.selector })));
     if (!fields.length) { this.toast.err('nothing crafted yet — craft first'); return; }
-    const tabId = (await this.arena.list()).find(t => t.active)?.id;
-    if (!tabId) { this.toast.err('open an arena tab first'); return; }
+    const n = this.tabCountN();
     this.filling.set(true);
     try {
-      const insp = await this.arena.inspect(tabId);
-      const editable = (insp.ok ? insp.fields : [])?.filter(pf => pf.editable) ?? [];
-      if (!editable.length && !fields.some(f => f.selector)) { this.toast.err(insp.note || 'could not read the arena form — try “⤓ from website”'); return; }
-      const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const match = (name: string) => {
-        const n = norm(name);
-        return editable.find(pf => norm(pf.name) === n || norm(pf.id) === n || norm(pf.label) === n)
-          ?? editable.find(pf => n && (norm(pf.name).includes(n) || norm(pf.label).includes(n)));
-      };
-      const enc = this.encKeys().length > 0 || this.encMarked;
-      const used = new Set<string>();
-      let filled = 0; const missed: string[] = [];
-      for (const f of fields) {
-        const sel = f.selector || match(f.name)?.selector;   // live-loaded fields carry their exact selector
-        if (!sel || used.has(sel)) { missed.push(f.name); continue; }
-        used.add(sel);
-        let val = f.value;
-        if (enc && f.primary) { try { val = (await this.api.encodeChain(this.encKeys(), val, this.encMarked)).result; } catch { /* raw */ } }
-        const r = await this.arena.fill(sel, val, tabId);
-        if (r.ok) filled++; else missed.push(f.name);
-      }
+      // tabs > 1 → open that many fresh tabs and fill each; tabs = 1 → fill the active tab (with match reporting).
+      if (n > 1) { await this.fillManyTabs(fields, n); return; }
+      const tabId = (await this.arena.list()).find(t => t.active)?.id;
+      if (!tabId) { this.toast.err('open an arena tab first'); return; }
+      const editable = await this.resolveEditable(tabId);
+      if (!editable.length && !fields.some(f => f.selector)) { this.toast.err('could not read the arena form — try “⤓ from website”'); return; }
+      const { filled, missed, used } = await this.fillFieldsIntoTab(fields, tabId, editable);
       // Editable page fields that no builder field targeted → likely missing from the builder.
+      const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       const builderNames = new Set(this.parts().flatMap(p => p.fields.map(f => norm(f.name))));
       const onPageOnly = editable.filter(pf => !used.has(pf.selector) && !builderNames.has(norm(pf.name)) && !builderNames.has(norm(pf.id)))
         .map(pf => pf.name || pf.id || pf.label).filter(Boolean);
@@ -590,7 +577,13 @@ export class WorkbenchPage {
     if (techs) this.usedTechniques.set(techs[1].split(',').map(s => s.trim()).filter(Boolean));
     const parsed = this.parseCraftedBlocks(text) ?? this.parseCraftedJson(text);
     if (!parsed) { if (!silent) this.toast.err('could not parse crafted fields — edit manually'); return; }
-    const next = this.parts().map(p => ({ ...p, fields: p.fields.map(f => ({ ...f })) }));
+    const { parts: next, applied } = this.mergeIntoParts(this.clonePartsDeep(), parsed);
+    this.parts.set(next);
+    if (applied) { this.crafted.set(this.builderPrimary()); this.aStep.set('fill'); if (!silent) this.toast.ok(`applied ${applied} field(s) to the builder`); }
+    else if (!silent) this.toast.err('no matching fields in the reply');
+  }
+  // Merge parsed @@SURFACE/@@FIELD values into a parts array (mutates + returns it); never overwrites locked fields.
+  private mergeIntoParts(next: IPart[], parsed: Record<string, Record<string, string>>): { parts: IPart[]; applied: number } {
     let applied = 0;
     for (const [surf, fields] of Object.entries(parsed)) {
       let part = next.find(p => p.surface.toLowerCase() === surf.toLowerCase());
@@ -603,9 +596,7 @@ export class WorkbenchPage {
         fld.value = val; applied++;
       }
     }
-    this.parts.set(next);
-    if (applied) { this.crafted.set(this.builderPrimary()); this.aStep.set('fill'); if (!silent) this.toast.ok(`applied ${applied} field(s) to the builder`); }
-    else if (!silent) this.toast.err('no matching fields in the reply');
+    return { parts: next, applied };
   }
   private parseCraftedBlocks(text: string): Record<string, Record<string, string>> | null {
     if (!/@@SURFACE/i.test(text)) return null;

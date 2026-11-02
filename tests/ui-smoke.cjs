@@ -141,9 +141,12 @@ function clickText(text) {
   await until(() => browser.evaluate("!!document.querySelector('.batch-actions')"), 8000, 'batch card');
   check(true, 'Batch multi-tab card renders on Find Break');
   check(await browser.evaluate("!!document.querySelector('.builder-card')"), 'Multi-surface injection builder renders on Find Break');
-  check(await clickText('+ add current'), '"+ add current" is clickable (guards gracefully with no craft)');
-  await clickText('Clear');
-  check(true, 'batch add/clear run without errors');
+  check(await browser.evaluate("!!document.querySelector('.batch-actions input[type=number]')"), 'Batch exposes the tabs-count setting (drives Fill website)');
+  check(await browser.evaluate("[...document.querySelectorAll('button')].some(b=>/Fill website/.test(b.textContent))"), '"Fill website" button renders in the builder');
+  // Setup card: renamed from "Craft context", now holds the batch settings + a "New session" button.
+  check(await browser.evaluate("[...document.querySelectorAll('h2')].some(h=>h.textContent.trim()==='Setup')"), 'Setup card heading renders (renamed from Craft context)');
+  check(await browser.evaluate("!!document.querySelector('.source-card .batch-actions')"), 'Batch settings live inside the Setup card');
+  check(await browser.evaluate("[...document.querySelectorAll('button')].some(b=>/New session/.test(b.textContent))"), '"New session" button renders in the Setup card');
 
   // ── 4) an overlay opens and closes ──
   step = 'workbench:overlay';
