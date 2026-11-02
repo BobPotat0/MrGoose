@@ -101,7 +101,7 @@ export interface MrGooseApi {
 }
 
 export interface PageField { tag: string; type: string; id: string; name: string; label: string; desc?: string; editable: boolean; selector: string; }
-export interface PageInspectContext { title?: string; headings?: string[]; controls?: { role?: string; label?: string; selected?: string[] }[]; }
+export interface PageInspectContext { title?: string; text?: string; headings?: string[]; controls?: { role?: string; label?: string; selected?: string[] }[]; }
 export interface PageInspect extends BridgeResult { fields?: PageField[]; context?: PageInspectContext; }
 
 declare global {

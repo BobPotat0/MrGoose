@@ -205,9 +205,9 @@ export class WorkbenchPage implements OnDestroy {
     if (this.syncingSel || !this.arena.available) return false;
     const active = (await this.arena.list()).find(t => t.active);
     if (!active) { if (!silent) this.toast.err('open an arena tab first'); return false; }
-    let ctx: { title?: string; headings?: string[]; controls?: { label?: string; selected?: string[] }[] } | undefined;
+    let ctx: { title?: string; text?: string; headings?: string[]; controls?: { label?: string; selected?: string[] }[] } | undefined;
     try { ctx = (await this.arena.inspect(active.id)).context; } catch { /* page not ready */ }
-    const hay = [active.url || '', active.title || '', ctx?.title || '', ...(ctx?.headings || []),
+    const hay = [active.url || '', active.title || '', ctx?.title || '', ctx?.text || '', ...(ctx?.headings || []),
       ...((ctx?.controls || []).flatMap(c => [c.label || '', ...(c.selected || [])]))].join(' \n ').toLowerCase();
     if (!hay.trim()) return false;
     const has = (s?: string) => !!s && s.trim().length > 2 && hay.includes(s.toLowerCase());

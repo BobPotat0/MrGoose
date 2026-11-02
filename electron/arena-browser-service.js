@@ -44,6 +44,7 @@ function pageOperation(operation, args) {
         editable: !el.disabled && !el.readOnly && (el.tagName === 'TEXTAREA' || el.isContentEditable || el.tagName === 'INPUT' && ['text', 'search', 'url', 'email', 'tel'].includes(el.type)),
         selector: selectorFor(el) })),
       context: { title: document.title,
+        text: ((document.body && document.body.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 6000),
         headings: [...document.querySelectorAll('h1,h2,h3')].filter(el => el.getClientRects().length).slice(0, 15).map(el => (el.innerText || '').slice(0, 200)),
         controls: [...document.querySelectorAll('button,[role=combobox],select')].filter(el => el.getClientRects().length && safe(el)).slice(0, 60).map(el => ({ role: el.getAttribute('role') || el.tagName.toLowerCase(), label: (el.getAttribute('aria-label') || el.innerText || '').slice(0, 160), selected: el.tagName === 'SELECT' ? [...el.selectedOptions].map(x => x.label) : undefined })) },
       regions: [...document.querySelectorAll('main,article,pre,[role=log],[aria-live]')].filter(el => safe(el) && el.getClientRects().length && !el.querySelector('input[type=password]')).slice(0, 15)
