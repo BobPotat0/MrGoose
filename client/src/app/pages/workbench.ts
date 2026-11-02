@@ -80,10 +80,10 @@ export class WorkbenchPage implements OnDestroy {
   readonly arenaDocked = signal(true);
   // attacker chat stop + model settings
   private aborted = false;
-  // auto-select model × scenario from the live arena page
-  private arenaUnsub?: () => void;
+  // auto-select model × scenario from the live arena page (the arena is an SPA — the URL never changes when you
+  // switch model/scenario, so we poll the active tab instead of watching the URL)
+  private arenaPoll?: ReturnType<typeof setInterval>;
   private syncingSel = false;
-  private lastArenaUrl = '';
   private requestId: string | null = null;
   readonly stopping = signal(false);
   readonly crafted = signal('');
@@ -178,17 +178,16 @@ export class WorkbenchPage implements OnDestroy {
       this.catalog.set(await this.api.encodeCatalog());
       try { this.arenaUrl = (await this.api.settings()).arenaUrl || this.arenaUrl; } catch { /* keep default */ }
       await this.onSelect();
-      // Follow the arena: when the active tab navigates to a different model/scenario page, auto-select it —
-      // but only when the builder is empty, so an in-progress craft is never wiped (⤓ from website forces it).
-      if (this.arena.available && !this.arenaUnsub) {
-        this.arenaUnsub = this.arena.onChanged(tabs => {
-          const u = tabs.find(t => t.active)?.url || '';
-          if (u && u !== this.lastArenaUrl) { this.lastArenaUrl = u; if (!this.builderHasContent()) void this.syncSelectionFromArena(false); }
-        });
+      // Follow the arena: poll the active tab and auto-select the model × scenario it shows — but only while the
+      // builder is empty, so an in-progress craft is never wiped. ⤓ from website forces a sync even with content.
+      if (this.arena.available && !this.arenaPoll) {
+        this.arenaPoll = setInterval(() => {
+          if (this.tab() === 'attack' && !this.syncingSel && !this.builderHasContent()) void this.syncSelectionFromArena(false);
+        }, 3000);
       }
     } catch { /* backend down */ }
   }
-  ngOnDestroy() { this.arenaUnsub?.(); }
+  ngOnDestroy() { if (this.arenaPoll) clearInterval(this.arenaPoll); }
   async onSelect() {
     this.markers.set(this.scenarios().find(s => s.code === this.scenarioCode)?.markers ?? []);
     if (this.modelName && this.scenarioCode) {
