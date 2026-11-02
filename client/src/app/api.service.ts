@@ -70,6 +70,8 @@ export class ApiService {
     return firstValueFrom(this.http.post(this.url(`/api/scenarios/${code}/recon`), dto));
   }
   delRecon(id: number) { return firstValueFrom(this.http.delete(this.url(`/api/recon/${id}`))); }
+  resetRecon(code: string) { return firstValueFrom(this.http.delete<{ removed: number }>(this.url(`/api/scenarios/${code}/recon`))); }
+  resetDossier(model: string, scenario: string) { return firstValueFrom(this.http.delete<{ tools: number; facts: number; injections: number; recon: number }>(this.url(`/api/dossier/reset?model=${encodeURIComponent(model)}&scenario=${encodeURIComponent(scenario)}`))); }
 
   // attacker + dossier
   systemPrompt(sel: PromptSelection) { return firstValueFrom(this.http.post<{ prompt: string }>(this.url('/api/craft/system-prompt'), sel)); }

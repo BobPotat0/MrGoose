@@ -329,7 +329,10 @@
             <span class="label-mono" style="color: var(--lime)">{{ modelName }}</span>
             <span class="mono dim" style="font-size: 12px">× {{ scenarioCode }}</span>
           </div>
-          <button class="btn" (click)="onSelect()">↻ refresh</button>
+          <div class="row">
+            <button class="btn" (click)="onSelect()">↻ refresh</button>
+            <button class="btn" (click)="resetAllRecon()" title="Wipe the whole dossier (tools, facts, injections, metadata) and the scenario-recon notes for this model × scenario">🗑 reset recon</button>
+          </div>
         </div>
         <div class="recon-meta">
           <label class="field"
@@ -501,9 +504,21 @@
             }
           </div>
           <div class="card alt" style="margin-top: 12px">
-            <h2>
-              Scenario recon <span class="section-count">{{ reconNotes().length }}</span>
-            </h2>
+            <div class="row spread">
+              <h2 style="margin: 0">
+                Scenario recon <span class="section-count">{{ reconNotes().length }}</span>
+              </h2>
+              @if (reconNotes().length) {
+                <button
+                  class="btn"
+                  style="font-size: 11px"
+                  (click)="resetReconNotes()"
+                  title="Clear all scenario-recon notes for this scenario"
+                >
+                  ↺ reset
+                </button>
+              }
+            </div>
             <p class="dim recon-caption">Ground-truth observations</p>
             <div class="row" style="margin-top: 6px">
               <input

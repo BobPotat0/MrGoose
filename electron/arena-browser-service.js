@@ -19,10 +19,28 @@ function pageOperation(operation, args) {
     }
     return parts.join(' > ');
   };
+  // The field's own guidance (helper text / tooltip): the arena states per-field rules here (e.g. "use a bare
+  // email outside the company; no display name"), which the crafting model must obey. aria-describedby + title
+  // first (the accessible, reliable sources), then a scoped helper element in the field's container.
+  const describeField = el => {
+    const txt = n => ((n && n.innerText) || '').replace(/\s+/g, ' ').trim();
+    const bits = [];
+    const by = el.getAttribute('aria-describedby');
+    if (by) for (const id of by.split(/\s+/)) { const n = document.getElementById(id); if (n) bits.push(txt(n)); }
+    if (el.getAttribute('title')) bits.push(el.getAttribute('title'));
+    if (!bits.some(Boolean)) {
+      const wrap = el.closest('[class*=field],[class*=Field],label,fieldset,div');
+      if (wrap) for (const n of wrap.querySelectorAll('[class*=hint],[class*=help],[class*=desc],[class*=caption],[class*=note],small,p')) {
+        if (!n.querySelector('input,textarea,select,button') && txt(n) && txt(n).length < 280) { bits.push(txt(n)); break; }
+      }
+    }
+    return [...new Set(bits.map(s => (s || '').trim()).filter(Boolean))].join(' · ').slice(0, 400);
+  };
   if (operation === 'inspect') {
     return { ok: true, fields: [...document.querySelectorAll('textarea,input,[contenteditable=true],select')].filter(el => safe(el) && el.getClientRects().length)
       .slice(0, 100).map(el => ({ tag: el.tagName.toLowerCase(), type: el.type || '', id: el.id, name: el.name || '',
         label: (el.getAttribute('aria-label') || el.labels?.[0]?.innerText || '').slice(0, 120),
+        desc: describeField(el),
         editable: !el.disabled && !el.readOnly && (el.tagName === 'TEXTAREA' || el.isContentEditable || el.tagName === 'INPUT' && ['text', 'search', 'url', 'email', 'tel'].includes(el.type)),
         selector: selectorFor(el) })),
       context: { title: document.title,

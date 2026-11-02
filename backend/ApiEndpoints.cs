@@ -48,6 +48,18 @@ public static class ApiEndpoints
             db.ReconNotes.Remove(e); await db.SaveChangesAsync(); return Results.Ok();
         });
 
+        // Clear every scenario-recon note for one scenario (the attacker records these via record_scenario_recon;
+        // a reset lets the operator wipe stale/misleading ground-truth and start the recon fresh).
+        app.MapDelete("/api/scenarios/{code}/recon", async (string code, MrGooseDb db) =>
+        {
+            var s = await db.Scenarios.FirstOrDefaultAsync(x => x.Code == code);
+            if (s is null) return Results.NotFound();
+            var notes = await db.ReconNotes.Where(n => n.ScenarioId == s.Id).ToListAsync();
+            db.ReconNotes.RemoveRange(notes);
+            await db.SaveChangesAsync();
+            return Results.Ok(new { removed = notes.Count });
+        });
+
         app.MapPut("/api/states", async (StateDto dto, MrGooseDb db) =>
         {
             var agent = await db.Models.Include(m => m.States)
@@ -288,6 +300,30 @@ public static class ApiEndpoints
         { var e = await db.DossierTools.FindAsync(id); if (e is null) return Results.NotFound(); db.DossierTools.Remove(e); await db.SaveChangesAsync(); return Results.Ok(); });
         app.MapDelete("/api/dossier/injection/{id:int}", async (int id, MrGooseDb db) =>
         { var e = await db.DossierInjections.FindAsync(id); if (e is null) return Results.NotFound(); db.DossierInjections.Remove(e); await db.SaveChangesAsync(); return Results.Ok(); });
+
+        // Reset the COMPLETE recon for one model×scenario: dossier tools (+ fired calls), facts (filters/gates/
+        // system tags), injections, free-text notes and harness metadata, PLUS the scenario-recon notes shared by
+        // the scenario. Keeps the operator's Template and the verdict/break-matrix cell.
+        app.MapDelete("/api/dossier/reset", async (string model, string scenario, AttackerService craft, MrGooseDb db) =>
+        {
+            var st = await craft.FindStateAsync(model, scenario);
+            int tools = 0, facts = 0, injections = 0;
+            if (st is not null)
+            {
+                tools = st.Tools.Count; facts = st.Facts.Count; injections = st.Injections.Count;
+                db.FiredCalls.RemoveRange(st.Tools.SelectMany(t => t.Calls));
+                db.DossierTools.RemoveRange(st.Tools);
+                db.DossierFacts.RemoveRange(st.Facts);
+                db.DossierInjections.RemoveRange(st.Injections);
+                st.Dossier = ""; st.Scaffold = ""; st.ToolNamespace = ""; st.Browser = false;
+                st.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+            var scen = await db.Scenarios.FirstOrDefaultAsync(x => x.Code == scenario);
+            var notes = scen is null ? new List<ReconNote>() : await db.ReconNotes.Where(n => n.ScenarioId == scen.Id).ToListAsync();
+            db.ReconNotes.RemoveRange(notes);
+            await db.SaveChangesAsync();
+            return Results.Ok(new { tools, facts, injections, recon = notes.Count });
+        });
 
         app.MapGet("/api/building-blocks", async (MrGooseDb db) => await db.BuildingBlocks.ToListAsync());
         app.MapPost("/api/building-blocks", async (BuildingBlock b, MrGooseDb db) =>
